@@ -1,36 +1,35 @@
 package main
 
 import (
-  "io"
-  "time"
-  "encoding/csv"
-  "strconv"
-  "flag"
-  "fmt"
-  "os"
+	"encoding/csv"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"time"
 )
 
 func main() {
-  flag.Parse()
-  var r io.Reader
-  if flag.NArg() == 0 || flag.Arg(0) == "-" {
-    r = os.Stdin
-  } else {
-    f, err := os.Open(flag.Arg(0))
-    if err != nil {
-      fmt.Fprintln(os.Stderr, err)
-      os.Exit(1)
-    }
-    defer f.Close()
-    r = f
-  }
+	flag.Parse()
+	var r io.Reader
+	if flag.NArg() == 0 || flag.Arg(0) == "-" {
+		r = os.Stdin
+	} else {
+		f, err := os.Open(flag.Arg(0))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		r = f
+	}
 
-  if err := sniffTypes(r); err != nil {
-    fmt.Fprintln(os.Stderr, err)
-    os.Exit(2)
-  }
+	if err := sniffTypes(r); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 }
-
 
 func sniffTypes(r io.Reader) error {
 	rs, err := csv.NewReader(r).Read()

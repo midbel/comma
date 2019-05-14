@@ -239,7 +239,7 @@ func (mf Multifield) String() string {
 
 func main() {
 	var cols, vals Columns
-  comma := flag.Bool("s", false, "csv")
+	comma := flag.Bool("s", false, "csv")
 	flag.Var(&cols, "c", "columns")
 	flag.Var(&vals, "x", "columns")
 	flag.Parse()
@@ -262,28 +262,28 @@ func main() {
 		fmt.Fprintln(os.Stderr, "aggregating data:", err)
 		os.Exit(7)
 	}
-  var options []linewriter.Option
-  if *comma {
-    options = append(options, linewriter.AsCSV(false))
-  } else {
-    options = []linewriter.Option{
-      linewriter.WithPadding([]byte(" ")),
-      linewriter.WithSeparator([]byte("|")),
-    }
-  }
+	var options []linewriter.Option
+	if *comma {
+		options = append(options, linewriter.AsCSV(false))
+	} else {
+		options = []linewriter.Option{
+			linewriter.WithPadding([]byte(" ")),
+			linewriter.WithSeparator([]byte("|")),
+		}
+	}
 	line := linewriter.NewWriter(1024, options...)
 	for _, g := range data {
 		for _, v := range g.Key.Fields {
 			writeLine(line, v, false)
 		}
-    if !*comma {
-      line.AppendSeparator(2)
-    }
+		if !*comma {
+			line.AppendSeparator(2)
+		}
 		for i, v := range g.Values {
 			writeLine(line, v, true)
-      if !*comma && i < len(g.Values)-1 {
-        line.AppendSeparator(2)
-      }
+			if !*comma && i < len(g.Values)-1 {
+				line.AppendSeparator(2)
+			}
 		}
 		io.Copy(os.Stdout, line)
 	}
@@ -309,7 +309,7 @@ func writeLine(line *linewriter.Writer, f Field, all bool) {
 			line.AppendDuration(f.Min, 8, linewriter.AlignRight)
 			line.AppendDuration(f.Max, 8, linewriter.AlignRight)
 			line.AppendInt(int64(f.count), 8, linewriter.AlignRight)
-			line.AppendDuration(f.Mean(), 12, linewriter.AlignRight | linewriter.Millisecond)
+			line.AppendDuration(f.Mean(), 12, linewriter.AlignRight|linewriter.Millisecond)
 		}
 	default:
 	}
@@ -392,9 +392,9 @@ func sniffTypes(r io.Reader) ([]ParseFunc, error) {
 	fs := []func(string) string{tryNumber, tryDate, tryDatetime, tryDuration}
 	for i := range rs {
 		var (
-      str string
-      parse ParseFunc
-    )
+			str   string
+			parse ParseFunc
+		)
 		for _, f := range fs {
 			str = f(rs[i])
 			if str != "" {
@@ -418,10 +418,10 @@ func sniffTypes(r io.Reader) ([]ParseFunc, error) {
 		case "duration":
 			parse = ParseDuration
 		}
-    ps[i] = func(v string) (Field, error) {
-      v = strings.TrimSpace(v)
-      return parse(strings.TrimFunc(v, func(r rune) bool { return r == '"'}))
-    }
+		ps[i] = func(v string) (Field, error) {
+			v = strings.TrimSpace(v)
+			return parse(strings.TrimFunc(v, func(r rune) bool { return r == '"' }))
+		}
 	}
 	if s, ok := r.(io.Seeker); ok {
 		_, err = s.Seek(0, io.SeekStart)
