@@ -35,11 +35,11 @@ func (c *Comma) String() string {
 }
 
 const (
-	colon = ':'
-	comma = ','
+	colon  = ':'
+	symbol = ','
 )
 
-func ParseSelection(v string) ([]int, error) {
+func ParseSelection(v string, fields int) ([]int, error) {
 	if len(v) == 0 {
 		return nil, ErrEmpty
 	}
@@ -56,10 +56,16 @@ func ParseSelection(v string) ([]int, error) {
 		}
 		n += nn
 		switch {
-		case k == comma || k == utf8.RuneError:
+		case k == symbol || k == utf8.RuneError:
 			i, err := strconv.ParseInt(str.String(), 10, 64)
-			if err != nil {
-				return nil, err
+			if !interval {
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				// TODO:
+				// left open interval = [..:X]
+				// right open interval = [X:..]
 			}
 			i--
 			if i := int(i); interval {
