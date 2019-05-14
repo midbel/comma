@@ -1,12 +1,45 @@
 package comma
 
 import (
+	"fmt"
 	"strconv"
+	"time"
 )
+
+type Kind int
+
+const (
+	KindNull Kind = iota
+	KindInt
+	KindFloat
+	KindDuration
+	KindDate
+	KindString
+)
+
+func (k Kind) String() string {
+	switch k {
+	default:
+		return "unknown"
+	case KindNull:
+		return "null"
+	case KindInt:
+		return "integer"
+	case KindFloat:
+		return "float"
+	case KindDuration:
+		return "duration"
+	case KindDate:
+		return "date"
+	case KindString:
+		return "string"
+	}
+}
 
 type Cell interface {
 	// Reset() Cell
 	// Update(Cell) Cell
+	Kind() Kind
 	fmt.Stringer
 }
 
@@ -14,9 +47,11 @@ type String struct {
 	Value string
 }
 
-func ParseString(v string) (Field, error) {
+func ParseString(v string) (Cell, error) {
 	return String{v}, nil
 }
+
+func (s String) Kind() Kind { return KindString }
 
 func (s String) String() string {
 	return s.Value
@@ -26,10 +61,10 @@ type Float struct {
 	Value float64
 	Min   float64
 	Max   float64
-	count int
+	Count int
 }
 
-func ParseFloat(v string) (Field, error) {
+func ParseFloat(v string) (Cell, error) {
 	var f Float
 	if v != "" {
 		n, err := strconv.ParseFloat(v, 64)
@@ -41,6 +76,8 @@ func ParseFloat(v string) (Field, error) {
 	f.Count++
 	return f, nil
 }
+
+func (f Float) Kind() Kind { return KindFloat }
 
 func (f Float) Mean() float64 {
 	if f.Count == 0 {
@@ -75,7 +112,7 @@ type Int struct {
 	Count int
 }
 
-func ParseInt(v string) (Field, error) {
+func ParseInt(v string) (Cell, error) {
 	var i Int
 	if v != "" {
 		n, err := strconv.ParseInt(v, 0, 64)
@@ -87,6 +124,8 @@ func ParseInt(v string) (Field, error) {
 	i.Count++
 	return i, nil
 }
+
+func (i Int) Kind() Kind { return KindInt }
 
 func (i Int) Mean() float64 {
 	if i.Count == 0 {
@@ -137,7 +176,16 @@ func ParseDuration(v string) (Cell, error) {
 	return d, nil
 }
 
-func (d Duration) Update(other Field) Field {
+func (d Duration) Kind() Kind { return KindDuration }
+
+func (d Duration) Mean() time.Duration {
+	if d.Count == 0 {
+		return 0
+	}
+	return d.Value / time.Duration(d.Count)
+}
+
+func (d Duration) Update(other Cell) Cell {
 	if x, ok := other.(Duration); ok {
 		d.Value += x.Value
 		if d.Count == 1 || x.Value <= d.Min {
@@ -149,13 +197,6 @@ func (d Duration) Update(other Field) Field {
 		d.Count++
 	}
 	return d
-}
-
-func (d Duration) Mean() time.Duration {
-	if d.Count == 0 {
-		return 0
-	}
-	return d.Value / time.Duration(d.Count)
 }
 
 func (d Duration) String() string {

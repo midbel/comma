@@ -6,8 +6,23 @@ import (
 	// "github.com/midbel/timefmt"
 )
 
-func Sniff(v string) {
+type ParseFunc func(string) (Cell, error)
 
+func Sniff(v string) (Cell, error) {
+	fs := []ParseFunc{
+		ParseInt,
+		ParseFloat,
+		ParseDuration,
+		// ParseDate,
+		// ParseDatetime,
+	}
+	for _, parse := range fs {
+		c, err := parse(v)
+		if err == nil {
+			return c, nil
+		}
+	}
+	return ParseString(v)
 }
 
 func tryNumber(v string) string {
