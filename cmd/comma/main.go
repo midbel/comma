@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/csv"
 	"fmt"
 	"io"
 	"os"
+	"unicode/utf8"
 
 	"github.com/midbel/cli"
 	"github.com/midbel/comma"
@@ -23,6 +21,11 @@ var commands = []*cli.Command{
 		Usage: "describe <file>",
 		Short: "",
 		Run:   runDescribe,
+	},
+	{
+		Usage: "filter [-table] [-file] <criteria>",
+		Short: "",
+		Run:   runFilter,
 	},
 }
 
@@ -47,79 +50,45 @@ func main() {
 	}
 }
 
-type settings struct {
-	Predicate string
-	File      string
-	Separator Comma
-	Table     bool
-	Width     int
+type Comma rune
 
-	Fields int
-}
-
-func (s *settings) Open(r io.Reader) *csv.Reader {
-	rb := bufio.NewReader(r)
-	if bs, err := rb.Peek(4096); err == nil {
-		rs := csv.NewReader(bytes.NewReader(bs))
-		if _, err := rs.Read(); err == nil {
-			s.Fields = rs.FieldsPerRecord
-		}
-	}
-	rs := csv.NewReader(rb)
-	rs.Comma = s.Separator.Rune()
-	rs.TrimLeadingSpace = true
-	if s.Fields > 0 {
-		rs.FieldsPerRecord = s.Fields
-	}
-
-	return rs
-}
-
-func runDescribe(cmd *cli.Command, args []string) error {
-	s := settings{
-		Separator: Comma(symbol),
-	}
-	cmd.Flag.Var(&s.Separator, "separator", "separator")
-	cmd.Flag.StringVar(&s.File, "file", "", "input file")
-	if err := cmd.Flag.Parse(args); err != nil {
-		return err
-	}
-
-	var r io.Reader
-	if s.File == "" || s.File == "-" {
-		r = os.Stdin
+func (c *Comma) Set(v string) error {
+	k, _ := utf8.DecodeRuneInString(v)
+	if k != utf8.RuneError {
+		*c = Comma(k)
 	} else {
-		f, err := os.Open(s.File)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		r = f
-	}
-	rs := s.Open(r)
-
-	row, err := rs.Read()
-	if err != nil {
-		return err
-	}
-	line := Line(true)
-	for i := range row {
-		c, err := comma.Sniff(row[i])
-		if err != nil {
-			return err
-		}
-		line.AppendInt(int64(i+1), 4, linewriter.AlignLeft)
-		line.AppendString(c.Kind().String(), 12, linewriter.AlignLeft)
-		line.AppendString(c.String(), 12, linewriter.AlignLeft)
-
-		io.Copy(os.Stdout, line)
+		return fmt.Errorf("invalid separator provided %s", v)
 	}
 	return nil
 }
 
+func (c *Comma) Rune() rune {
+	return rune(*c)
+}
+
+func (c *Comma) String() string {
+	return fmt.Sprintf("%c", *c)
+}
+
+type settings struct {
+	Predicate string
+	File      string
+	Width     int
+  Table     bool
+  Separator Comma
+}
+
+func runFilter(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
+}
+
+func runDescribe(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
+}
+
 func runSelect(cmd *cli.Command, args []string) error {
 	s := settings{
-		Separator: Comma(symbol),
+		Separator: Comma(','),
 		Width:     DefaultWidth,
 	}
 
@@ -131,33 +100,27 @@ func runSelect(cmd *cli.Command, args []string) error {
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
 	}
-	var r io.Reader
+	var (
+		r   *comma.Reader
+		err error
+	)
+	sep := s.Separator.Rune()
+	opt := comma.WithSelection(cmd.Flag.Arg(0))
 	if s.File == "" || s.File == "-" {
-		r = os.Stdin
+		r, err = comma.NewReader(os.Stdin, sep, opt)
 	} else {
-		f, err := os.Open(s.File)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		r = f
+		r, err = comma.Open(s.File, sep, opt)
 	}
-	rs := s.Open(r)
-
-	cols, err := ParseSelection(cmd.Flag.Arg(0), s.Fields)
 	if err != nil {
-		return fmt.Errorf("selection: %s", err)
+		return err
 	}
+	defer r.Close()
 
 	dump := WriteRecords(os.Stdout, s.Width, s.Table)
-	values := make([]string, len(cols))
 	for {
-		switch row, err := rs.Read(); err {
+		switch row, err := r.Next(); err {
 		case nil:
-			for i, ix := range cols {
-				values[i] = row[ix]
-			}
-			dump(values)
+			dump(row)
 		case io.EOF:
 			return nil
 		default:
