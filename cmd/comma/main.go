@@ -139,12 +139,12 @@ func runSelect(cmd *cli.Command, args []string) error {
 	}
 
 	dump := WriteRecords(os.Stdout, s.Width, s.Table)
-  values := make([]string, len(cols))
+	values := make([]string, len(cols))
 	for {
 		switch row, err := rs.Read(); err {
 		case nil:
 			for i, ix := range cols {
-        values[i] = row[ix]
+				values[i] = row[ix]
 			}
 			dump(values)
 		case io.EOF:
