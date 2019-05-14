@@ -72,7 +72,7 @@ func ParseSelection(v string, fields int) ([]int, error) {
 					i = fields
 				}
 			}
-			if i := i; interval {
+			if interval {
 				var j int
 				if n := len(cs); n > 0 {
 					j = cs[n-1]

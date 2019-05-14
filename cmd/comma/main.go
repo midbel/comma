@@ -15,10 +15,9 @@ import (
 
 var commands = []*cli.Command{
 	{
-		Usage: "slice [-separator] [-table] [-file] <columns>",
-		Alias: []string{"split", "select"},
+		Usage: "select [-separator] [-table] [-file] <selections>",
 		Short: "",
-		Run:   runSlice,
+		Run:   runSelect,
 	},
 	{
 		Usage: "describe <file>",
@@ -107,7 +106,7 @@ func runDescribe(cmd *cli.Command, args []string) error {
 	return nil
 }
 
-func runSlice(cmd *cli.Command, args []string) error {
+func runSelect(cmd *cli.Command, args []string) error {
 	s := settings{
 		Separator: Comma(symbol),
 		Width:     DefaultWidth,
