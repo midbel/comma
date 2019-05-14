@@ -26,10 +26,21 @@ var commands = []*cli.Command{
 	},
 }
 
-const helpText = "comma helps you to explore your data stored in csv files"
+const helpText = `{{.Name}} helps you to explore your data stored in csv files
+
+Usage:
+
+  {{.Name}} command [options] <arguments>
+
+Available commands:
+
+{{range .Commands}}{{if .Runnable}}{{printf "  %-12s %s" .String .Short}}{{if .Alias}} (alias: {{ join .Alias ", "}}){{end}}{{end}}
+{{end}}
+Use {{.Name}} [command] -h for more information about its usage.
+`
 
 func main() {
-	err := cli.Run(commands, cli.Usage("tmcat", helpText, commands), nil)
+	err := cli.Run(commands, cli.Usage("comma", helpText, commands), nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
