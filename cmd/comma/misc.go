@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	ErrRange  = errors.New("out of range")
 	ErrEmpty  = errors.New("empty")
 	ErrSyntax = errors.New("invalid syntax")
 )
@@ -41,7 +42,11 @@ const (
 
 func ParseSelection(v string, fields int) ([]int, error) {
 	if len(v) == 0 {
-		return nil, ErrEmpty
+		vs := make([]int, fields)
+		for i := 0; i < fields; i++ {
+			vs[i] = i
+		}
+		return vs, nil //ErrEmpty
 	}
 	var (
 		n        int
@@ -57,18 +62,17 @@ func ParseSelection(v string, fields int) ([]int, error) {
 		n += nn
 		switch {
 		case k == symbol || k == utf8.RuneError:
-			i, err := strconv.ParseInt(str.String(), 10, 64)
+			i, err := parseIndex(str.String(), fields)
 			if !interval {
 				if err != nil {
 					return nil, err
 				}
 			} else {
-				// TODO:
-				// left open interval = [..:X]
-				// right open interval = [X:..]
+				if last, _ := utf8.DecodeLastRuneInString(v[:n-nn]); last == colon {
+					i = fields
+				}
 			}
-			i--
-			if i := int(i); interval {
+			if i := i; interval {
 				var j int
 				if n := len(cs); n > 0 {
 					j = cs[n-1]
@@ -92,11 +96,11 @@ func ParseSelection(v string, fields int) ([]int, error) {
 		case k == colon:
 			var j int
 			if str.Len() > 0 {
-				i, err := strconv.ParseInt(str.String(), 10, 64)
+				i, err := parseIndex(str.String(), fields)
 				if err != nil {
 					return nil, err
 				}
-				j = int(i) - 1
+				j = i
 			}
 			str.Reset()
 			cs, interval = append(cs, j), true
@@ -114,4 +118,16 @@ func ParseSelection(v string, fields int) ([]int, error) {
 			return nil, ErrSyntax
 		}
 	}
+}
+
+func parseIndex(str string, lim int) (int, error) {
+	i, err := strconv.ParseInt(str, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	if i < 1 || i > int64(lim) {
+		return 0, ErrRange
+	}
+	i--
+	return int(i), nil
 }
