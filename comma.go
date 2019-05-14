@@ -21,21 +21,9 @@ var (
 
 type Option func(*Reader) error
 
-// func WithSeparator(r rune) Option {
-// 	return func(r *Reader) error {
-// 		return nil
-// 	}
-// }
-//
-// func WithTypes() Option {
-//   return func(r *Reader) error {
-//     return nil
-//   }
-// }
-
 func WithSelection(v string) Option {
 	return func(r *Reader) error {
-		cs, err := ParseSelection(v, r.inner.FieldsPerRecord)
+		cs, err := ParseSelection(v, r.fields)
 		if err == nil {
 			r.indices = append(r.indices, cs...)
 		}
@@ -47,45 +35,53 @@ type Reader struct {
 	io.Closer
 	inner *csv.Reader
 
+	fields  int
 	indices []int
+	// types []string
 
 	Err error
 }
 
-func Open(file string, options ...Option) (*Reader, error) {
+func Open(file string, sep rune, options ...Option) (*Reader, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
-	return NewReader(f, options...), nil
+	return NewReader(f, sep, options...)
 }
 
-func NewReader(r io.Reader, options ...Option) *Reader {
-	var cols int
+func NewReader(r io.Reader, sep rune, options ...Option) (*Reader, error) {
+	var rs Reader
+
+	if x, ok := r.(io.Closer); ok {
+		rs.Closer = x
+	} else {
+		rs.Closer = ioutil.NopCloser(r)
+	}
 
 	rb := bufio.NewReader(r)
 	if bs, err := rb.Peek(4096); err == nil {
-		rs := csv.NewReader(bytes.NewReader(bs))
-		if _, err := rs.Read(); err == nil {
-			cols = rs.FieldsPerRecord
+		rc := csv.NewReader(bytes.NewReader(bs))
+		rc.Comma = sep
+		rc.TrimLeadingSpace = true
+
+		if _, err := rc.Read(); err == nil {
+			rs.fields = rc.FieldsPerRecord
 		}
 	}
-	rs := csv.NewReader(rb)
-	if cols > 0 {
-		rs.FieldsPerRecord = cols
+	for _, opt := range options {
+		if err := opt(&rs); err != nil {
+			return nil, err
+		}
 	}
-	rs.TrimLeadingSpace = true
 
-	var c io.Closer
-	if x, ok := r.(io.Closer); ok {
-		c = x
-	} else {
-		c = ioutil.NopCloser(r)
+	rs.inner = csv.NewReader(rb)
+	rs.inner.Comma = sep
+	rs.inner.TrimLeadingSpace = true
+	if rs.fields > 0 {
+		rs.inner.FieldsPerRecord = rs.fields
 	}
-	return &Reader{
-		Closer: c,
-		inner:  rs,
-	}
+	return &rs, nil
 }
 
 func (r *Reader) Next() ([]string, error) {
@@ -100,7 +96,7 @@ func (r *Reader) Next() ([]string, error) {
 		r.Err = err
 	} else {
 		if len(r.indices) > 0 {
-			ds := make([]string, r.inner.FieldsPerRecord)
+			ds := make([]string, len(r.indices))
 			for i, ix := range r.indices {
 				ds[i] = row[ix]
 			}
@@ -179,6 +175,10 @@ func ParseSelection(v string, fields int) ([]int, error) {
 			}
 			str.Reset()
 			cs, interval = append(cs, j), true
+		case unicode.IsSpace(k):
+			if last, _ := utf8.DecodeLastRuneInString(v[:n-nn]); last != virgule {
+				return nil, ErrSyntax
+			}
 		case unicode.IsDigit(k):
 			str.WriteRune(k)
 			for {
