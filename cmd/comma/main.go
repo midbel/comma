@@ -139,18 +139,14 @@ func runSelect(cmd *cli.Command, args []string) error {
 	}
 
 	dump := WriteRecords(os.Stdout, s.Width, s.Table)
+  values := make([]string, len(cols))
 	for {
 		switch row, err := rs.Read(); err {
 		case nil:
-			vs := make([]string, len(cols))
-			for i := 0; i < len(cols); i++ {
-				if ix := cols[i]; ix < 0 || ix >= len(row) {
-					return fmt.Errorf("index out of range")
-				} else {
-					vs[i] = row[ix]
-				}
+			for i, ix := range cols {
+        values[i] = row[ix]
 			}
-			dump(vs)
+			dump(values)
 		case io.EOF:
 			return nil
 		default:

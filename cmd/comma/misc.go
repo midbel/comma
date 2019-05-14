@@ -69,7 +69,7 @@ func ParseSelection(v string, fields int) ([]int, error) {
 				}
 			} else {
 				if last, _ := utf8.DecodeLastRuneInString(v[:n-nn]); last == colon {
-					i = fields
+					i = fields-1
 				}
 			}
 			if interval {
