@@ -74,8 +74,8 @@ type settings struct {
 	Predicate string
 	File      string
 	Width     int
-  Table     bool
-  Separator Comma
+	Table     bool
+	Separator Comma
 }
 
 func runFilter(cmd *cli.Command, args []string) error {
@@ -104,12 +104,14 @@ func runSelect(cmd *cli.Command, args []string) error {
 		r   *comma.Reader
 		err error
 	)
-	sep := s.Separator.Rune()
-	opt := comma.WithSelection(cmd.Flag.Arg(0))
+	opts := []comma.Option{
+		comma.WithSelection(cmd.Flag.Arg(0)),
+		comma.WithSeparator(s.Separator.Rune()),
+	}
 	if s.File == "" || s.File == "-" {
-		r, err = comma.NewReader(os.Stdin, sep, opt)
+		r, err = comma.NewReader(os.Stdin, opts...)
 	} else {
-		r, err = comma.Open(s.File, sep, opt)
+		r, err = comma.Open(s.File, opts...)
 	}
 	if err != nil {
 		return err

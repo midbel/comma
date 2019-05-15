@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -21,9 +22,27 @@ var (
 
 type Option func(*Reader) error
 
+func WithSeparator(c rune) Option {
+	return func(r *Reader) error {
+		if unicode.IsPunct(c) || c == ' ' || c == '\t' {
+			r.inner.Comma = c
+		} else {
+			return fmt.Errorf("invalid separator %c", c)
+		}
+		return nil
+	}
+}
+
+//
+// func WithTypes(r rune) Option {
+// 	return func(r *Reader) error {
+// 		return nil
+// 	}
+// }
+
 func WithSelection(v string) Option {
 	return func(r *Reader) error {
-		cs, err := ParseSelection(v, r.fields)
+		cs, err := ParseSelection(v)
 		if err == nil {
 			r.indices = append(r.indices, cs...)
 		}
@@ -35,22 +54,21 @@ type Reader struct {
 	io.Closer
 	inner *csv.Reader
 
-	fields  int
-	indices []int
+	indices []Selection
 	// types []string
 
-	Err error
+	err error
 }
 
-func Open(file string, sep rune, options ...Option) (*Reader, error) {
+func Open(file string, options ...Option) (*Reader, error) {
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
-	return NewReader(f, sep, options...)
+	return NewReader(f, options...)
 }
 
-func NewReader(r io.Reader, sep rune, options ...Option) (*Reader, error) {
+func NewReader(r io.Reader, options ...Option) (*Reader, error) {
 	var rs Reader
 
 	if x, ok := r.(io.Closer); ok {
@@ -60,50 +78,52 @@ func NewReader(r io.Reader, sep rune, options ...Option) (*Reader, error) {
 	}
 
 	rb := bufio.NewReader(r)
-	if bs, err := rb.Peek(4096); err == nil {
-		rc := csv.NewReader(bytes.NewReader(bs))
-		rc.Comma = sep
-		rc.TrimLeadingSpace = true
-
-		if _, err := rc.Read(); err == nil {
-			rs.fields = rc.FieldsPerRecord
-		}
-	}
+	rs.inner = csv.NewReader(rb)
+	rs.inner.TrimLeadingSpace = true
+	// TODO: remove sniffing to get the number of fields
+	// if bs, err := rb.Peek(4096); err == nil {
+	// 	rc := csv.NewReader(bytes.NewReader(bs))
+	// 	rc.Comma = sep
+	// 	rc.TrimLeadingSpace = true
+	//
+	// 	if _, err := rc.Read(); err == nil {
+	// 		rs.fields = rc.FieldsPerRecord
+	// 	}
+	// }
 	for _, opt := range options {
 		if err := opt(&rs); err != nil {
 			return nil, err
 		}
 	}
-
-	rs.inner = csv.NewReader(rb)
-	rs.inner.Comma = sep
-	rs.inner.TrimLeadingSpace = true
-	if rs.fields > 0 {
-		rs.inner.FieldsPerRecord = rs.fields
-	}
 	return &rs, nil
 }
 
+func (r *Reader) Err() error {
+	return r.err
+}
+
 func (r *Reader) Next() ([]string, error) {
-	if r.Err != nil {
-		return nil, r.Err
-	}
-	if r.Err != nil {
-		return nil, r.Err
+	if r.err != nil {
+		return nil, r.err
 	}
 	row, err := r.inner.Read()
 	if err != nil {
-		r.Err = err
+		r.err = err
 	} else {
 		if len(r.indices) > 0 {
-			ds := make([]string, len(r.indices))
-			for i, ix := range r.indices {
-				ds[i] = row[ix]
+			ds := make([]string, 0, len(r.indices))
+			for _, ix := range r.indices {
+				vs, err := ix.Select(row)
+				if err != nil {
+					r.err = err
+					return nil, r.err
+				}
+				ds = append(ds, vs...)
 			}
 			row = ds
 		}
 	}
-	return row, r.Err
+	return row, r.err
 }
 
 const (
@@ -111,17 +131,89 @@ const (
 	virgule = ','
 )
 
-func ParseSelection(v string, fields int) ([]int, error) {
-	if len(v) == 0 {
-		vs := make([]int, fields)
-		for i := 0; i < fields; i++ {
-			vs[i] = i
+type Selection struct {
+	start    int
+	end      int
+	interval bool
+	open     bool
+}
+
+func (s Selection) IsOpen() bool {
+	return s.interval && (s.start == 0 || s.end == 0)
+}
+
+func (s Selection) String() string {
+	tmp := make([]byte, 0, 64)
+	if s.interval {
+		if s.start > 0 {
+			tmp = strconv.AppendInt(tmp, int64(s.start), 10)
 		}
-		return vs, nil //ErrEmpty
+		tmp = append(tmp, ':')
+		if s.end > 0 {
+			tmp = strconv.AppendInt(tmp, int64(s.end), 10)
+		}
+	} else {
+		tmp = strconv.AppendInt(tmp, int64(s.start), 10)
+	}
+	return string(tmp)
+}
+
+func (s Selection) Select(values []string) ([]string, error) {
+	if s.interval {
+		return s.selectOpen(values)
+	} else {
+		return s.selectSingle(values)
+	}
+}
+
+func (s Selection) selectOpen(values []string) ([]string, error) {
+	var start, end int
+	switch {
+	case s.start == 0 && s.end > 0:
+		end = s.end - 1
+	case s.end == 0 && s.start > 0:
+		start, end = s.start-1, len(values)-1
+	case s.start == 0 && s.end == 0:
+		start, end = 0, len(values)-1
+	default:
+		start, end = s.start-1, s.end-1
+	}
+
+	if start < 0 {
+		return nil, ErrRange
+	}
+	if end >= len(values) {
+		return nil, ErrRange
+	}
+	var reverse bool
+	if start > end {
+		reverse = !reverse
+		end, start = start, end
+	}
+	vs := make([]string, (end+1)-start)
+	if n := copy(vs, values[start:end+1]); reverse {
+		for i, j := 0, n-1; i < n/2; i, j = i+1, j-1 {
+			vs[i], vs[j] = vs[j], vs[i]
+		}
+	}
+	return vs, nil
+}
+
+func (s Selection) selectSingle(values []string) ([]string, error) {
+	if i := s.start - 1; i < 0 || i >= len(values) {
+		return nil, ErrRange
+	} else {
+		return []string{values[i]}, nil
+	}
+}
+
+func ParseSelection(v string) ([]Selection, error) {
+	if len(v) == 0 {
+		return nil, nil
 	}
 	var (
 		n        int
-		cs       []int
+		cs       []Selection
 		str      bytes.Buffer
 		interval bool
 	)
@@ -131,50 +223,41 @@ func ParseSelection(v string, fields int) ([]int, error) {
 			return nil, ErrSyntax
 		}
 		n += nn
+
 		switch {
 		case k == virgule || k == utf8.RuneError:
-			i, err := parseIndex(str.String(), fields)
-			if !interval {
+			var i int
+			if str.Len() > 0 {
+				j, err := strconv.ParseInt(str.String(), 10, 64)
 				if err != nil {
 					return nil, err
 				}
+				i = int(j)
+				str.Reset()
+			}
+			if n := len(cs); n > 0 && cs[n-1].interval && interval {
+				cs[n-1].end = i
 			} else {
-				if last, _ := utf8.DecodeLastRuneInString(v[:n-nn]); last == colon {
-					i = fields - 1
-				}
+				cs = append(cs, Selection{start: i})
 			}
-			if interval {
-				var j int
-				if n := len(cs); n > 0 {
-					j = cs[n-1]
-				}
-				if j < i {
-					for k := j + 1; k < i; k++ {
-						cs = append(cs, k)
-					}
-				} else {
-					for k := j - 1; k > i; k-- {
-						cs = append(cs, k)
-					}
-				}
-			}
-			str.Reset()
-			cs, interval = append(cs, int(i)), false
+			interval = false
 
 			if k == utf8.RuneError {
 				return cs, nil
 			}
 		case k == colon:
-			var j int
+			var s Selection
 			if str.Len() > 0 {
-				i, err := parseIndex(str.String(), fields)
+				i, err := strconv.ParseInt(str.String(), 10, 64)
 				if err != nil {
 					return nil, err
 				}
-				j = i
+				str.Reset()
+				s.start = int(i)
 			}
-			str.Reset()
-			cs, interval = append(cs, j), true
+			s.open, s.interval = true, true
+			cs = append(cs, s)
+			interval = true
 		case unicode.IsSpace(k):
 			if last, _ := utf8.DecodeLastRuneInString(v[:n-nn]); last != virgule {
 				return nil, ErrSyntax
@@ -193,16 +276,4 @@ func ParseSelection(v string, fields int) ([]int, error) {
 			return nil, ErrSyntax
 		}
 	}
-}
-
-func parseIndex(str string, lim int) (int, error) {
-	i, err := strconv.ParseInt(str, 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	if i < 1 || i > int64(lim) {
-		return 0, ErrRange
-	}
-	i--
-	return int(i), nil
 }
