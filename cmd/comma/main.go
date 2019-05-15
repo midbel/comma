@@ -81,7 +81,7 @@ func (c *Comma) String() string {
 	return fmt.Sprintf("%c", *c)
 }
 
-type settings struct {
+type Options struct {
 	Predicate string
 	File      string
 	Width     int
@@ -89,8 +89,25 @@ type settings struct {
 	Separator Comma
 }
 
+func (o Options) Open(cols string) (*comma.Reader, error) {
+	opts := []comma.Option{
+		comma.WithSeparator(o.Separator.Rune()),
+		comma.WithSelection(cols),
+	}
+	var (
+		r   *comma.Reader
+		err error
+	)
+	if o.File == "" || o.File == "-" {
+		r, err = comma.NewReader(os.Stdin, opts...)
+	} else {
+		r, err = comma.Open(o.File, opts...)
+	}
+	return r, err
+}
+
 func runGroup(cmd *cli.Command, args []string) error {
-  return cmd.Flag.Parse(args)
+	return cmd.Flag.Parse(args)
 }
 
 func runFormat(cmd *cli.Command, args []string) error {
@@ -98,7 +115,36 @@ func runFormat(cmd *cli.Command, args []string) error {
 }
 
 func runFilter(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
+	o := Options{
+		Separator: Comma(','),
+		Width:     DefaultWidth,
+	}
+
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+	r, err := o.Open("")
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	dump := WriteRecords(os.Stdout, o.Width, o.Table)
+	for {
+		switch row, err := r.Filter(nil); err {
+		case nil:
+			dump(row)
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
 }
 
 func runDescribe(cmd *cli.Command, args []string) error {
@@ -106,38 +152,25 @@ func runDescribe(cmd *cli.Command, args []string) error {
 }
 
 func runSelect(cmd *cli.Command, args []string) error {
-	s := settings{
+	o := Options{
 		Separator: Comma(','),
 		Width:     DefaultWidth,
 	}
-
-	cmd.Flag.Var(&s.Separator, "separator", "separator")
-	cmd.Flag.IntVar(&s.Width, "width", s.Width, "column width")
-	cmd.Flag.StringVar(&s.File, "file", "", "input file")
-	cmd.Flag.BoolVar(&s.Table, "table", false, "print data in table format")
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
 	}
-	var (
-		r   *comma.Reader
-		err error
-	)
-	opts := []comma.Option{
-		comma.WithSelection(cmd.Flag.Arg(0)),
-		comma.WithSeparator(s.Separator.Rune()),
-	}
-	if s.File == "" || s.File == "-" {
-		r, err = comma.NewReader(os.Stdin, opts...)
-	} else {
-		r, err = comma.Open(s.File, opts...)
-	}
+	r, err := o.Open(cmd.Flag.Arg(0))
 	if err != nil {
 		return err
 	}
 	defer r.Close()
 
-	dump := WriteRecords(os.Stdout, s.Width, s.Table)
+	dump := WriteRecords(os.Stdout, o.Width, o.Table)
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
