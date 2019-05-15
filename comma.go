@@ -42,6 +42,9 @@ func WithSeparator(c rune) Option {
 
 func WithSelection(v string) Option {
 	return func(r *Reader) error {
+		if v == "" {
+			return nil
+		}
 		cs, err := ParseSelection(v)
 		if err == nil {
 			r.indices = append(r.indices, cs...)
@@ -91,6 +94,18 @@ func NewReader(r io.Reader, options ...Option) (*Reader, error) {
 
 func (r *Reader) Err() error {
 	return r.err
+}
+
+func (r *Reader) Filter(m Matcher) ([]string, error) {
+	for {
+		row, err := r.Next()
+		if err != nil {
+			return nil, err
+		}
+		if m == nil || m.Match(row) {
+			return row, nil
+		}
+	}
 }
 
 func (r *Reader) Next() ([]string, error) {
@@ -267,4 +282,12 @@ func ParseSelection(v string) ([]Selection, error) {
 			return nil, ErrSyntax
 		}
 	}
+}
+
+type Matcher interface {
+	Match(row []string) bool
+}
+
+func ParseFilter(v string) (Matcher, error) {
+	return nil, nil
 }
