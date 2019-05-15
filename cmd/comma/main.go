@@ -27,6 +27,17 @@ var commands = []*cli.Command{
 		Short: "",
 		Run:   runFilter,
 	},
+	{
+		Usage: "format [-table] [-file] <selections>",
+		Alias: []string{"fmt"},
+		Short: "",
+		Run:   runFormat,
+	},
+	{
+		Usage: "group [-table] [-file]",
+		Short: "",
+		Run:   nil,
+	},
 }
 
 const helpText = `{{.Name}} helps you to explore your data stored in csv files
@@ -76,6 +87,14 @@ type settings struct {
 	Width     int
 	Table     bool
 	Separator Comma
+}
+
+func runGroup(cmd *cli.Command, args []string) error {
+  return cmd.Flag.Parse(args)
+}
+
+func runFormat(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
 }
 
 func runFilter(cmd *cli.Command, args []string) error {

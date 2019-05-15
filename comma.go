@@ -80,16 +80,7 @@ func NewReader(r io.Reader, options ...Option) (*Reader, error) {
 	rb := bufio.NewReader(r)
 	rs.inner = csv.NewReader(rb)
 	rs.inner.TrimLeadingSpace = true
-	// TODO: remove sniffing to get the number of fields
-	// if bs, err := rb.Peek(4096); err == nil {
-	// 	rc := csv.NewReader(bytes.NewReader(bs))
-	// 	rc.Comma = sep
-	// 	rc.TrimLeadingSpace = true
-	//
-	// 	if _, err := rc.Read(); err == nil {
-	// 		rs.fields = rc.FieldsPerRecord
-	// 	}
-	// }
+
 	for _, opt := range options {
 		if err := opt(&rs); err != nil {
 			return nil, err
