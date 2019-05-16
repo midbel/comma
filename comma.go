@@ -598,6 +598,8 @@ func parseOperator(r io.RuneScanner) (Expr, error) {
 				e = &not{expr: e}
 			}
 		}
+	case '~':
+		e = new(almost)
 	default:
 		err = ErrSyntax
 	}
@@ -632,9 +634,30 @@ func (a and) matchAND(row []string) bool {
 	return a.right.Match(row)
 }
 
+type almost struct {
+	Index int
+	Value string
+
+	hint string
+}
+
+func (a *almost) Set(ix int, value string) {
+	a.Index = ix
+	a.Value = value
+}
+
+func (a *almost) Match(row []string) bool {
+	if a.Index < 0 || a.Index >= len(row) {
+		return false
+	}
+	return strings.Contains(row[a.Index], a.Value)
+}
+
 type equal struct {
 	Index int
 	Value string
+
+	hint string
 }
 
 func (e *equal) Set(ix int, value string) {
