@@ -111,7 +111,37 @@ func runGroup(cmd *cli.Command, args []string) error {
 }
 
 func runFormat(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
+	o := Options{
+		Separator: Comma(','),
+		Width:     DefaultWidth,
+	}
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+	r, err := o.Open("")
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	dump := WriteRecords(os.Stdout, o.Width, o.Table)
+	for {
+		switch row, err := r.Next(); err {
+		case nil:
+			dump(row)
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
+
+	return nil
 }
 
 func runFilter(cmd *cli.Command, args []string) error {
