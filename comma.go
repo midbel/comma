@@ -292,7 +292,54 @@ func ParseFilter(v string) (Matcher, error) {
 	if len(v) == 0 {
 		return always{}, nil
 	}
-	return nil, nil
+	var (
+		n       int
+		e       equal
+		opfound bool
+	)
+	for {
+		k, nn := utf8.DecodeRuneInString(v[n:])
+		if k == utf8.RuneError {
+			if nn == 0 {
+				break
+			}
+			return nil, ErrSyntax
+		}
+		n += nn
+		switch {
+		case unicode.IsDigit(k) && !opfound:
+			x, y := n-nn, 0
+			for {
+				k, nn = utf8.DecodeRuneInString(v[n:])
+				if !unicode.IsDigit(k) {
+					y = n
+					break
+				}
+				n += nn
+			}
+			i, err := strconv.ParseInt(v[x:y], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			e.Index = int(i) - 1
+		case k == '=':
+			k, nn = utf8.DecodeRuneInString(v[n:])
+			if k != '=' {
+				return nil, ErrSyntax
+			}
+			n += nn
+			opfound = true
+		case k == ' ':
+		default:
+			x := n - nn
+			for k != utf8.RuneError {
+				k, nn = utf8.DecodeRuneInString(v[n:])
+				n += nn
+			}
+			e.Value = v[x:n]
+		}
+	}
+	return e, nil
 }
 
 type always struct{}
@@ -308,13 +355,16 @@ type equal struct {
 }
 
 func (e equal) Match(row []string) bool {
+	if e.Value == "" {
+		return true
+	}
 	if e.Index < 0 {
 		return e.matchAny(row)
 	}
 	return e.matchStrict(row)
 }
 
-func (e equal) matchStrict(row []string) {
+func (e equal) matchStrict(row []string) bool {
 	if !e.not {
 		return row[e.Index] == e.Value
 	} else {
