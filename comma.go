@@ -3,6 +3,7 @@ package comma
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -74,6 +75,8 @@ func WithFormatters(specifiers []string) Option {
 			case "bool", "boolean":
 				f = formatBool(pattern)
 			case "string":
+			case "base64":
+				f = formatBase64(pattern)
 			case "size":
 				f = formatSize(pattern)
 			case "enum":
@@ -84,6 +87,16 @@ func WithFormatters(specifiers []string) Option {
 			r.formatters = append(r.formatters, formatter{Index: int(ix), Format: f})
 		}
 		return nil
+	}
+}
+
+func formatBase64(method string) func(string) (string, error) {
+	e := base64.StdEncoding
+	if method == "url" {
+		e = base64.URLEncoding
+	}
+	return func(v string) (string, error) {
+		return e.EncodeToString([]byte(v)), nil
 	}
 }
 
@@ -157,6 +170,9 @@ func formatBool(method string) func(string) (string, error) {
 }
 
 func formatSize(method string) func(string) (string, error) {
+	if method == "" {
+		method = sizefmt.SI
+	}
 	return func(v string) (string, error) {
 		f, err := strconv.ParseFloat(v, 64)
 		if err != nil {
