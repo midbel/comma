@@ -289,5 +289,52 @@ type Matcher interface {
 }
 
 func ParseFilter(v string) (Matcher, error) {
+	if len(v) == 0 {
+		return always{}, nil
+	}
 	return nil, nil
+}
+
+type always struct{}
+
+func (_ always) Match(row []string) bool {
+	return true
+}
+
+type equal struct {
+	not   bool
+	Index int
+	Value string
+}
+
+func (e equal) Match(row []string) bool {
+	if e.Index < 0 {
+		return e.matchAny(row)
+	}
+	return e.matchStrict(row)
+}
+
+func (e equal) matchStrict(row []string) {
+	if !e.not {
+		return row[e.Index] == e.Value
+	} else {
+		return row[e.Index] != e.Value
+	}
+}
+
+func (e equal) matchAny(row []string) bool {
+	if !e.not {
+		for _, r := range row {
+			if r == e.Value {
+				return true
+			}
+		}
+	} else {
+		for _, r := range row {
+			if r != e.Value {
+				return true
+			}
+		}
+	}
+	return false
 }

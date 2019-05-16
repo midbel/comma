@@ -128,6 +128,10 @@ func runFilter(cmd *cli.Command, args []string) error {
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
 	}
+	match, err := comma.ParseFilter(cmd.Flag.Arg(0))
+	if err != nil {
+		return fmt.Errorf("filter: %s", err)
+	}
 	r, err := o.Open("")
 	if err != nil {
 		return err
@@ -136,7 +140,7 @@ func runFilter(cmd *cli.Command, args []string) error {
 
 	dump := WriteRecords(os.Stdout, o.Width, o.Table)
 	for {
-		switch row, err := r.Filter(nil); err {
+		switch row, err := r.Filter(match); err {
 		case nil:
 			dump(row)
 		case io.EOF:
