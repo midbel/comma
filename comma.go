@@ -77,6 +77,7 @@ func WithFormatters(specifiers []string) Option {
 			case "size":
 				f = formatSize(pattern)
 			case "enum":
+				f = formatEnum(pattern)
 			default:
 				return fmt.Errorf("unkown column type %s", kind)
 			}
@@ -86,9 +87,19 @@ func WithFormatters(specifiers []string) Option {
 	}
 }
 
-func formatEnum(values string) func(string) (string, error) {
+func formatEnum(str string) func(string) (string, error) {
+	values := strings.FieldsFunc(str, func(r rune) bool { return r == '=' || r == ',' })
+	set := make(map[string]string)
+	for i := 0; i < len(values); i += 2 {
+		k, v := strings.TrimSpace(values[i]), strings.TrimSpace(values[i+1])
+		set[k] = v
+	}
 	return func(v string) (string, error) {
-		return v, nil
+		s, ok := set[v]
+		if !ok {
+			s = v
+		}
+		return s, nil
 	}
 }
 
