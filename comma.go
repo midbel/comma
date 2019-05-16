@@ -378,6 +378,7 @@ func parseValue(r io.RuneScanner) (string, error) {
 		if unicode.IsLetter(k) || unicode.IsDigit(k) {
 			str.WriteRune(k)
 		} else {
+			r.UnreadRune()
 			break
 		}
 	}
