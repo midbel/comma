@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -288,73 +289,198 @@ type Matcher interface {
 	Match(row []string) bool
 }
 
+type Expr interface {
+	Matcher
+	Set(int, string)
+}
+
 func ParseFilter(v string) (Matcher, error) {
 	if len(v) == 0 {
 		return always{}, nil
 	}
-	var (
-		n       int
-		e       equal
-		opfound bool
-	)
-	for {
-		k, nn := utf8.DecodeRuneInString(v[n:])
-		if k == utf8.RuneError {
-			if nn == 0 {
-				break
-			}
-			return nil, ErrSyntax
-		}
-		n += nn
-		switch {
-		case unicode.IsDigit(k) && !opfound:
-			x, y := n-nn, 0
-			for {
-				k, nn = utf8.DecodeRuneInString(v[n:])
-				if !unicode.IsDigit(k) {
-					y = n
-					break
-				}
-				n += nn
-			}
-			i, err := strconv.ParseInt(v[x:y], 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			e.Index = int(i) - 1
-		case k == '=':
-			k, nn = utf8.DecodeRuneInString(v[n:])
-			if k != '=' {
-				return nil, ErrSyntax
-			}
-			n += nn
-			opfound = true
-		case k == ' ':
-		default:
-			x := n - nn
-			for k != utf8.RuneError {
-				k, nn = utf8.DecodeRuneInString(v[n:])
-				n += nn
-			}
-			e.Value = v[x:n]
-		}
-	}
-	return e, nil
+	return parseFilter(strings.NewReader(v))
 }
 
-type always struct{}
+func parseFilter(r io.RuneScanner) (Matcher, error) {
+	expr, err := parseExpression(r)
+	if err != nil {
+		return nil, err
+	}
+	var match Matcher = expr
+	k, _, err := r.ReadRune()
+	switch k {
+	case 0:
+		return match, nil
+	case '&', '|':
+		err := peekNext(k, r)
+		if err != nil {
+			return nil, err
+		}
+		a := and{op: k, left: expr}
+		if a.right, err = parseFilter(r); err != nil {
+			return nil, err
+		}
+		match = a
+	default:
+		return nil, ErrSyntax
+	}
+	return match, nil
+}
 
-func (_ always) Match(row []string) bool {
-	return true
+func parseExpression(rs io.RuneScanner) (Expr, error) {
+	defer skipSpaces(rs)
+
+	ix, err := parseIndex(rs)
+	if err != nil {
+		return nil, err
+	}
+
+	m, err := parseOperator(rs)
+	if err != nil {
+		return nil, err
+	}
+
+	value, err := parseValue(rs)
+	if err != nil {
+		return nil, err
+	}
+
+	m.Set(ix, value)
+	return m, nil
+}
+
+func skipSpaces(r io.RuneScanner) error {
+	for {
+		k, _, err := r.ReadRune()
+		if err != nil {
+			return err
+		}
+		if !unicode.IsSpace(k) {
+			break
+		}
+	}
+	return r.UnreadRune()
+}
+
+func parseValue(r io.RuneScanner) (string, error) {
+	if err := skipSpaces(r); err != nil {
+		return "", err
+	}
+	var str bytes.Buffer
+	for {
+		k, _, err := r.ReadRune()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return "", err
+		}
+		if unicode.IsLetter(k) || unicode.IsDigit(k) {
+			str.WriteRune(k)
+		} else {
+			break
+		}
+	}
+	return str.String(), nil
+}
+
+func parseIndex(r io.RuneScanner) (int, error) {
+	if err := skipSpaces(r); err != nil {
+		return 0, err
+	}
+	var str bytes.Buffer
+	for {
+		k, _, err := r.ReadRune()
+		if err != nil {
+			return 0, err
+		}
+		if !unicode.IsDigit(k) {
+			r.UnreadRune()
+			break
+		}
+		str.WriteRune(k)
+	}
+	i, err := strconv.ParseInt(str.String(), 10, 64)
+	if err == nil {
+		i--
+	}
+	return int(i), err
+}
+
+func peekNext(want rune, r io.RuneScanner) error {
+	got, _, err := r.ReadRune()
+	if err != nil {
+		return err
+	}
+	if got != want {
+		err = ErrSyntax
+	}
+	return err
+}
+
+func parseOperator(r io.RuneScanner) (Expr, error) {
+	if err := skipSpaces(r); err != nil {
+		return nil, err
+	}
+	k, _, err := r.ReadRune()
+	if err != nil {
+		return nil, err
+	}
+
+	var e Expr
+	switch k {
+	case '=', '!':
+		if err = peekNext('=', r); err == nil {
+			e = new(equal) // TODO: really ugly - rewrite!!!
+			if k == '!' {
+				e = &not{expr: e}
+			}
+		}
+	default:
+		err = ErrSyntax
+	}
+	return e, err
+}
+
+type and struct {
+	op    rune
+	left  Matcher
+	right Matcher
+}
+
+func (a and) Match(row []string) bool {
+	if a.op == '|' {
+		return a.matchOR(row)
+	} else {
+		return a.matchAND(row)
+	}
+}
+
+func (a and) matchOR(row []string) bool {
+	if ok := a.left.Match(row); ok {
+		return ok
+	}
+	return a.right.Match(row)
+}
+
+func (a and) matchAND(row []string) bool {
+	if ok := a.left.Match(row); !ok {
+		return ok
+	}
+	return a.right.Match(row)
 }
 
 type equal struct {
-	not   bool
 	Index int
 	Value string
 }
 
-func (e equal) Match(row []string) bool {
+func (e *equal) Set(ix int, value string) {
+	e.Index = ix
+	e.Value = value
+}
+
+func (e *equal) Match(row []string) bool {
 	if e.Value == "" {
 		return true
 	}
@@ -365,26 +491,37 @@ func (e equal) Match(row []string) bool {
 }
 
 func (e equal) matchStrict(row []string) bool {
-	if !e.not {
-		return row[e.Index] == e.Value
-	} else {
-		return row[e.Index] != e.Value
-	}
+	return row[e.Index] == e.Value
 }
 
 func (e equal) matchAny(row []string) bool {
-	if !e.not {
-		for _, r := range row {
-			if r == e.Value {
-				return true
-			}
-		}
-	} else {
-		for _, r := range row {
-			if r != e.Value {
-				return true
-			}
+	for _, r := range row {
+		if r == e.Value {
+			return true
 		}
 	}
 	return false
+}
+
+type always struct{}
+
+func (_ always) Match(row []string) bool {
+	return true
+}
+
+type not struct {
+	expr Expr
+}
+
+func (n *not) Set(ix int, value string) {
+	if n.expr != nil {
+		n.expr.Set(ix, value)
+	}
+}
+
+func (n *not) Match(row []string) bool {
+	if n.expr == nil {
+		return true
+	}
+	return !n.expr.Match(row)
 }
