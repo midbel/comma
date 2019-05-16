@@ -89,10 +89,11 @@ type Options struct {
 	Separator Comma
 }
 
-func (o Options) Open(cols string) (*comma.Reader, error) {
+func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
 	opts := []comma.Option{
 		comma.WithSeparator(o.Separator.Rune()),
 		comma.WithSelection(cols),
+		comma.WithFormatters(specs),
 	}
 	var (
 		r   *comma.Reader
@@ -123,7 +124,7 @@ func runFormat(cmd *cli.Command, args []string) error {
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
 	}
-	r, err := o.Open("")
+	r, err := o.Open("", cmd.Flag.Args())
 	if err != nil {
 		return err
 	}
@@ -162,7 +163,7 @@ func runFilter(cmd *cli.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("filter: %s", err)
 	}
-	r, err := o.Open("")
+	r, err := o.Open("", nil)
 	if err != nil {
 		return err
 	}
@@ -198,7 +199,7 @@ func runSelect(cmd *cli.Command, args []string) error {
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
 	}
-	r, err := o.Open(cmd.Flag.Arg(0))
+	r, err := o.Open(cmd.Flag.Arg(0), nil)
 	if err != nil {
 		return err
 	}

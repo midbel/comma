@@ -13,6 +13,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/midbel/sizefmt"
+	"github.com/midbel/timefmt"
 )
 
 var (
@@ -31,6 +34,139 @@ func WithSeparator(c rune) Option {
 			return fmt.Errorf("invalid separator %c", c)
 		}
 		return nil
+	}
+}
+
+func WithFormatters(specifiers []string) Option {
+	split := func(s string) (string, string, string) {
+		fields := strings.Split(s, ":")
+		for len(fields) < 3 {
+			fields = append(fields, "")
+		}
+		return fields[0], fields[1], fields[2]
+	}
+	return func(r *Reader) error {
+		if len(specifiers) == 0 {
+			return nil
+		}
+		for _, s := range specifiers {
+			col, kind, pattern := split(s)
+			ix, err := strconv.ParseInt(col, 10, 64)
+			if err != nil {
+				return err
+			}
+			ix--
+			if ix < 0 {
+				return ErrRange
+			}
+			f := func(v string) (string, error) {
+				return v, nil
+			}
+			switch strings.ToLower(kind) {
+			case "date":
+				f = formatDate(pattern, []string{"%Y-%m-%d", "%Y/%m/%d"})
+			case "datetime":
+				f = formatDate(pattern, []string{"%Y-%m-%d %H:%M:%S"})
+			case "int":
+				f = formatInt(pattern)
+			case "float", "double", "number":
+				f = formatFloat(pattern)
+			case "bool", "boolean":
+				f = formatBool(pattern)
+			case "string":
+			case "size":
+				f = formatSize(pattern)
+			case "enum":
+			default:
+				return fmt.Errorf("unkown column type %s", kind)
+			}
+			r.formatters = append(r.formatters, formatter{Index: int(ix), Format: f})
+		}
+		return nil
+	}
+}
+
+func formatEnum(values string) func(string) (string, error) {
+	return func(v string) (string, error) {
+		return v, nil
+	}
+}
+
+func formatInt(pattern string) func(string) (string, error) {
+	if pattern == "" {
+		pattern = "%d"
+	}
+	return func(v string) (string, error) {
+		i, err := strconv.ParseInt(v, 0, 64)
+		if err == nil {
+			v = fmt.Sprintf(pattern, i)
+		}
+		return v, err
+	}
+}
+
+func formatFloat(pattern string) func(string) (string, error) {
+	if pattern == "" {
+		pattern = "%f"
+	}
+	return func(v string) (string, error) {
+		f, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			v = fmt.Sprintf(pattern, f)
+		}
+		return v, err
+	}
+}
+
+func formatBool(method string) func(string) (string, error) {
+	var t, f string
+	switch method {
+	case "onoff":
+		t, f = "on", "off"
+	case "yesno":
+		t, f = "yes", "no"
+	case "status":
+		t, f = "enabled", "disabled"
+	case "vx":
+		t, f = "v", "x"
+	default:
+		t, f = "true", "false"
+	}
+	return func(v string) (string, error) {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return "", err
+		}
+		str := f
+		if b {
+			str = t
+		}
+		return str, nil
+	}
+}
+
+func formatSize(method string) func(string) (string, error) {
+	return func(v string) (string, error) {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", err
+		}
+		return sizefmt.Format(f, method), nil
+	}
+}
+
+func formatDate(pattern string, fs []string) func(string) (string, error) {
+	return func(v string) (string, error) {
+		if pattern == "" {
+			return v, nil
+		}
+		for _, f := range fs {
+			w, err := timefmt.Parse(v, f)
+			if err == nil {
+				return timefmt.Format(w, pattern), nil
+			}
+		}
+		return "", fmt.Errorf("invalid date/datetime")
 	}
 }
 
@@ -54,11 +190,17 @@ func WithSelection(v string) Option {
 	}
 }
 
+type formatter struct {
+	Index  int
+	Format func(string) (string, error)
+}
+
 type Reader struct {
 	io.Closer
 	inner *csv.Reader
 
-	indices []Selection
+	indices    []Selection
+	formatters []formatter
 	// types []string
 
 	err error
@@ -117,6 +259,14 @@ func (r *Reader) Next() ([]string, error) {
 	if err != nil {
 		r.err = err
 	} else {
+		if len(r.formatters) > 0 {
+			for _, f := range r.formatters {
+				row[f.Index], err = f.Format(row[f.Index])
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
 		if len(r.indices) > 0 {
 			ds := make([]string, 0, len(r.indices))
 			for _, ix := range r.indices {
