@@ -170,7 +170,11 @@ func runGroup(cmd *cli.Command, args []string) error {
 	}
 	sel, err := comma.ParseSelection(cmd.Flag.Arg(0))
 	if err != nil {
-		return fmt.Errorf("selection: %s", err)
+		return fmt.Errorf("selection (key): %s", err)
+	}
+	cols, err := comma.ParseSelection(cmd.Flag.Arg(1))
+	if err != nil {
+		return fmt.Errorf("selection (columns): %s", err)
 	}
 
 	r, err := o.Open("", nil)
@@ -192,12 +196,16 @@ func runGroup(cmd *cli.Command, args []string) error {
 					Hash:  id,
 					Keys:  keys,
 					Count: 1,
+					Data:  []comma.Aggr{comma.Count(), comma.Sum(), comma.Mean()},
 				}
 				if ix >= len(rows) {
 					rows = append(rows, r)
 				} else {
 					rows = append(rows[:ix], append([]Row{r}, rows[ix:]...)...)
 				}
+			}
+			if err := rows[ix].Update(cols, row); err != nil {
+				return err
 			}
 		case io.EOF:
 			line := Line(o.Table)
@@ -207,6 +215,9 @@ func runGroup(cmd *cli.Command, args []string) error {
 					line.AppendString(v, o.Width, linewriter.AlignRight)
 				}
 				line.AppendUint(r.Count, o.Width, linewriter.AlignRight)
+				for _, d := range r.Data {
+					line.AppendFloat(d.Result(), o.Width, 2, linewriter.AlignRight|linewriter.Float)
+				}
 				io.Copy(os.Stdout, line)
 			}
 			return nil
@@ -220,6 +231,25 @@ type Row struct {
 	Count uint64
 	Keys  []string
 	Hash  string
+
+	Data []comma.Aggr
+}
+
+func (r *Row) Update(sel []comma.Selection, row []string) error {
+	for _, s := range sel {
+		vs, err := s.Select(row)
+		if err != nil {
+			return err
+		}
+		for _, d := range r.Data {
+			for _, v := range vs {
+				if err := d.Aggr(v); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func selectKeys(sel []comma.Selection, row []string) ([]string, string) {

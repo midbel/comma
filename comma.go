@@ -228,6 +228,77 @@ type formatter struct {
 	Format func(string) (string, error)
 }
 
+type Aggr interface {
+	Aggr(string) error
+	Result() float64
+}
+
+type sum struct {
+	value float64
+}
+
+func Sum() Aggr {
+	var s sum
+	return &s
+}
+
+func (s *sum) Aggr(v string) error {
+	f, err := strconv.ParseFloat(v, 64)
+	if err == nil {
+		s.value += f
+	}
+	return err
+}
+
+func (s *sum) Result() float64 {
+	return s.value
+}
+
+type count struct {
+	count int64
+}
+
+func Count() Aggr {
+	var c count
+	return &c
+}
+
+func (c *count) Aggr(v string) error {
+	c.count++
+	return nil
+}
+
+func (c *count) Result() float64 {
+	return float64(c.count)
+}
+
+type mean struct {
+	value float64
+	count int
+}
+
+func Mean() Aggr {
+	var m mean
+	return &m
+}
+
+func (m *mean) Aggr(v string) error {
+	f, err := strconv.ParseFloat(v, 64)
+	if err == nil {
+		m.count++
+		m.value += f
+	}
+	return err
+}
+
+func (m *mean) Result() float64 {
+	var r float64
+	if m.count > 0 {
+		r = m.value / float64(m.count)
+	}
+	return r
+}
+
 type Reader struct {
 	io.Closer
 	inner *csv.Reader
