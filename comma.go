@@ -84,6 +84,9 @@ func WithFormatters(specifiers []string) Option {
 			default:
 				return fmt.Errorf("unkown column type %s", kind)
 			}
+			if f == nil {
+				return ErrSyntax
+			}
 			r.formatters = append(r.formatters, formatter{Index: int(ix), Format: f})
 		}
 		return nil
@@ -104,6 +107,9 @@ func formatEnum(str string) func(string) (string, error) {
 	values := strings.FieldsFunc(str, func(r rune) bool { return r == '=' || r == ',' })
 	set := make(map[string]string)
 	for i := 0; i < len(values); i += 2 {
+		if i+1 >= len(values) {
+			return nil
+		}
 		k, v := strings.TrimSpace(values[i]), strings.TrimSpace(values[i+1])
 		set[k] = v
 	}
