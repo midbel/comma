@@ -45,6 +45,11 @@ var commands = []*cli.Command{
 		Short: "",
 		Run:   runTranspose,
 	},
+	{
+		Usage: "cat [-table] [-width] [-column] <file,...>",
+		Short: "",
+		Run: runCat,
+	}
 }
 
 const helpText = `{{.Name}} helps you to explore your data stored in csv files
@@ -112,6 +117,10 @@ func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
 		r, err = comma.Open(o.File, opts...)
 	}
 	return r, err
+}
+
+func runCat(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
 }
 
 func runTranspose(cmd *cli.Command, args []string) error {

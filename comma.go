@@ -230,7 +230,9 @@ type formatter struct {
 
 type Aggr interface {
 	Aggr(string) error
+	// Aggr([]string) error
 	Result() float64
+	// Result() []float64
 }
 
 type sum struct {
