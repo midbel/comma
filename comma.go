@@ -243,6 +243,9 @@ func Sum() Aggr {
 }
 
 func (s *sum) Aggr(v string) error {
+	if v == "" {
+		return nil
+	}
 	f, err := strconv.ParseFloat(v, 64)
 	if err == nil {
 		s.value += f
@@ -284,7 +287,7 @@ func Mean() Aggr {
 
 func (m *mean) Aggr(v string) error {
 	f, err := strconv.ParseFloat(v, 64)
-	if err == nil {
+	if err == nil || v == "" {
 		m.count++
 		m.value += f
 	}
