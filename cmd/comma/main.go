@@ -40,6 +40,11 @@ var commands = []*cli.Command{
 		Short: "",
 		Run:   runGroup,
 	},
+	{
+		Usage: "transpose [-table] [-file]",
+		Short: "",
+		Run:   runTranspose,
+	},
 }
 
 const helpText = `{{.Name}} helps you to explore your data stored in csv files
@@ -107,6 +112,47 @@ func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
 		r, err = comma.Open(o.File, opts...)
 	}
 	return r, err
+}
+
+func runTranspose(cmd *cli.Command, args []string) error {
+	o := Options{
+		Separator: Comma(','),
+		Width:     DefaultWidth,
+	}
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+	r, err := o.Open("", nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	var rows [][]string
+	for {
+		switch row, err := r.Next(); err {
+		case nil:
+			if n := len(rows); n == 0 {
+				rows = make([][]string, len(row))
+			}
+			for i, r := range row {
+				rows[i] = append(rows[i], r)
+			}
+		case io.EOF:
+			dump := WriteRecords(os.Stdout, o.Width, o.Table)
+			for _, r := range rows {
+				dump(r)
+			}
+			return nil
+		default:
+			return err
+		}
+	}
 }
 
 func runGroup(cmd *cli.Command, args []string) error {
