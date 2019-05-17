@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/midbel/cli"
@@ -34,9 +36,9 @@ var commands = []*cli.Command{
 		Run:   runFormat,
 	},
 	{
-		Usage: "group [-table] [-file]",
+		Usage: "group [-table] [-file] <key> [<operation>...]",
 		Short: "",
-		Run:   nil,
+		Run:   runGroup,
 	},
 }
 
@@ -108,7 +110,82 @@ func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
 }
 
 func runGroup(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
+	o := Options{
+		Separator: Comma(','),
+		Width:     DefaultWidth,
+	}
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+	sel, err := comma.ParseSelection(cmd.Flag.Arg(0))
+	if err != nil {
+		return fmt.Errorf("selection: %s", err)
+	}
+
+	r, err := o.Open("", nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	var rows []Row
+	for {
+		switch row, err := r.Next(); err {
+		case nil:
+			keys, id := selectKeys(sel, row)
+			ix := sort.Search(len(rows), func(i int) bool { return rows[i].Hash <= id })
+			if ix < len(rows) && rows[ix].Hash == id {
+				rows[ix].Count++
+			} else {
+				r := Row{
+					Hash:  id,
+					Keys:  keys,
+					Count: 1,
+				}
+				if ix >= len(rows) {
+					rows = append(rows, r)
+				} else {
+					rows = append(rows[:ix], append([]Row{r}, rows[ix:]...)...)
+				}
+			}
+		case io.EOF:
+			line := Line(o.Table)
+			for i := range rows {
+				r := rows[i]
+				for _, v := range r.Keys {
+					line.AppendString(v, o.Width, linewriter.AlignRight)
+				}
+				line.AppendUint(r.Count, o.Width, linewriter.AlignRight)
+				io.Copy(os.Stdout, line)
+			}
+			return nil
+		default:
+			return err
+		}
+	}
+}
+
+type Row struct {
+	Count uint64
+	Keys  []string
+	Hash  string
+}
+
+func selectKeys(sel []comma.Selection, row []string) ([]string, string) {
+	var ds []string
+	for _, s := range sel {
+		vs, err := s.Select(row)
+		if err != nil {
+			return nil, ""
+		}
+		ds = append(ds, vs...)
+	}
+	return ds, strings.Join(ds, "/")
 }
 
 func runFormat(cmd *cli.Command, args []string) error {
