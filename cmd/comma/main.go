@@ -48,7 +48,7 @@ var commands = []*cli.Command{
 	{
 		Usage: "cat [-table] [-width] [-column] <file,...>",
 		Short: "",
-		Run: runCat,
+		Run:   runCat,
 	},
 }
 

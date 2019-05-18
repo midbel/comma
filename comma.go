@@ -379,7 +379,7 @@ func (c *count) Result() []float64 {
 
 type mean struct {
 	aggr  *sum
-	count  int
+	count int
 }
 
 func Mean() Aggr {
@@ -402,7 +402,7 @@ func (m *mean) Result() []float64 {
 	}
 	c := float64(m.count)
 	for i := range vs {
-		cs[i] = vs[i]/c
+		cs[i] = vs[i] / c
 	}
 	return cs
 }
