@@ -49,7 +49,7 @@ var commands = []*cli.Command{
 		Usage: "cat [-table] [-width] [-column] <file,...>",
 		Short: "",
 		Run: runCat,
-	}
+	},
 }
 
 const helpText = `{{.Name}} helps you to explore your data stored in csv files
@@ -205,7 +205,7 @@ func runGroup(cmd *cli.Command, args []string) error {
 					Hash:  id,
 					Keys:  keys,
 					Count: 1,
-					Data:  []comma.Aggr{comma.Count(), comma.Sum(), comma.Mean()},
+					Data:  []comma.Aggr{comma.Count(), comma.Sum(), comma.Mean(), comma.Min(), comma.Max()},
 				}
 				if ix >= len(rows) {
 					rows = append(rows, r)
@@ -213,8 +213,14 @@ func runGroup(cmd *cli.Command, args []string) error {
 					rows = append(rows[:ix], append([]Row{r}, rows[ix:]...)...)
 				}
 			}
-			if err := rows[ix].Update(cols, row); err != nil {
-				return err
+			for _, s := range cols {
+				set, err := s.Select(row)
+				if err != nil {
+					return err
+				}
+				if err := rows[ix].Update(set); err != nil {
+					return err
+				}
 			}
 		case io.EOF:
 			line := Line(o.Table)
@@ -225,7 +231,9 @@ func runGroup(cmd *cli.Command, args []string) error {
 				}
 				line.AppendUint(r.Count, o.Width, linewriter.AlignRight)
 				for _, d := range r.Data {
-					line.AppendFloat(d.Result(), o.Width, 2, linewriter.AlignRight|linewriter.Float)
+					for _, r := range d.Result() {
+						line.AppendFloat(r, o.Width, 2, linewriter.AlignRight|linewriter.Float)
+					}
 				}
 				io.Copy(os.Stdout, line)
 			}
@@ -244,18 +252,10 @@ type Row struct {
 	Data []comma.Aggr
 }
 
-func (r *Row) Update(sel []comma.Selection, row []string) error {
-	for _, s := range sel {
-		vs, err := s.Select(row)
-		if err != nil {
+func (r *Row) Update(row []string) error {
+	for _, d := range r.Data {
+		if err := d.Aggr(row); err != nil {
 			return err
-		}
-		for _, d := range r.Data {
-			for _, v := range vs {
-				if err := d.Aggr(v); err != nil {
-					return err
-				}
-			}
 		}
 	}
 	return nil
