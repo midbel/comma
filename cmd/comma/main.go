@@ -51,7 +51,7 @@ var commands = []*cli.Command{
 		Run:   runCat,
 	},
 	{
-		Usage: "sort [-table] [-width] [-file] <selection>"
+		Usage: "sort [-table] [-width] [-file] <selection>",
 		Short: "",
 		Run:   runSort,
 	},
@@ -181,6 +181,55 @@ func runTranspose(cmd *cli.Command, args []string) error {
 	}
 }
 
+type Aggr struct {
+	sel []comma.Selection
+	comma.Aggr
+}
+
+func (a *Aggr) Update(row []string) error {
+	for _, s := range a.sel {
+		rs, err := s.Select(row)
+		if err != nil {
+			return err
+		}
+		if err := a.Aggr.Aggr(rs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parseAggr(vs []string) ([]Aggr, error) {
+	if mod := len(vs) % 2; mod != 0 {
+		return nil, fmt.Errorf("no enough argument")
+	}
+	var as []Aggr
+	for i := 0; i < len(vs); i+=2 {
+		op, sel := vs[i], vs[i+1]
+		s, err := comma.ParseSelection(sel)
+		if err != nil {
+			return nil, err
+		}
+		var a comma.Aggr
+		switch strings.ToLower(op) {
+		case "mean":
+			a = comma.Mean()
+		case "sum", "cum":
+			a = comma.Sum()
+		case "min":
+			a = comma.Min()
+		case "max":
+			a = comma.Max()
+		case "count":
+			a = comma.Count()
+		default:
+			return nil, fmt.Errorf("unknown operation %s", op)
+		}
+		as = append(as, Aggr{sel: s, Aggr: a})
+	}
+	return as, nil
+}
+
 func runGroup(cmd *cli.Command, args []string) error {
 	o := Options{
 		Separator: Comma(','),
@@ -198,10 +247,6 @@ func runGroup(cmd *cli.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("selection (key): %s", err)
 	}
-	cols, err := comma.ParseSelection(cmd.Flag.Arg(1))
-	if err != nil {
-		return fmt.Errorf("selection (columns): %s", err)
-	}
 
 	r, err := o.Open("", nil)
 	if err != nil {
@@ -210,6 +255,7 @@ func runGroup(cmd *cli.Command, args []string) error {
 	defer r.Close()
 
 	var rows []Row
+	ops := cmd.Flag.Args()
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
@@ -222,22 +268,20 @@ func runGroup(cmd *cli.Command, args []string) error {
 					Hash:  id,
 					Keys:  keys,
 					Count: 1,
-					Data:  []comma.Aggr{comma.Count(), comma.Sum(), comma.Mean(), comma.Min(), comma.Max()},
 				}
+				as, err := parseAggr(ops[1:])
+				if err != nil {
+					return err
+				}
+				r.Data = append(r.Data, as...)
 				if ix >= len(rows) {
 					rows = append(rows, r)
 				} else {
 					rows = append(rows[:ix], append([]Row{r}, rows[ix:]...)...)
 				}
 			}
-			for _, s := range cols {
-				set, err := s.Select(row)
-				if err != nil {
-					return err
-				}
-				if err := rows[ix].Update(set); err != nil {
-					return err
-				}
+			if err := rows[ix].Update(row); err != nil {
+				return err
 			}
 		case io.EOF:
 			line := Line(o.Table)
@@ -266,12 +310,12 @@ type Row struct {
 	Keys  []string
 	Hash  string
 
-	Data []comma.Aggr
+	Data []Aggr
 }
 
 func (r *Row) Update(row []string) error {
 	for _, d := range r.Data {
-		if err := d.Aggr(row); err != nil {
+		if err := d.Update(row); err != nil {
 			return err
 		}
 	}
