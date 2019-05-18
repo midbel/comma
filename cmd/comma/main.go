@@ -15,7 +15,7 @@ import (
 
 var commands = []*cli.Command{
 	{
-		Usage: "select [-separator] [-table] [-file] <selections>",
+		Usage: "select [-separator] [-table] [-file] <selection>",
 		Short: "",
 		Run:   runSelect,
 	},
@@ -30,7 +30,7 @@ var commands = []*cli.Command{
 		Run:   runFilter,
 	},
 	{
-		Usage: "format [-table] [-file] <selections>",
+		Usage: "format [-table] [-file] <selection...>",
 		Alias: []string{"fmt"},
 		Short: "",
 		Run:   runFormat,
@@ -49,6 +49,11 @@ var commands = []*cli.Command{
 		Usage: "cat [-table] [-width] [-column] <file,...>",
 		Short: "",
 		Run:   runCat,
+	},
+	{
+		Usage: "sort [-table] [-width] [-file] <selection>"
+		Short: "",
+		Run:   runSort,
 	},
 }
 
@@ -120,6 +125,18 @@ func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
 }
 
 func runCat(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
+}
+
+func runSort(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
+}
+
+func runJoin(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
+}
+
+func runCross(cmd *cli.Command, args []string) error {
 	return cmd.Flag.Parse(args)
 }
 
