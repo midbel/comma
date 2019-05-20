@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -25,7 +26,7 @@ var commands = []*cli.Command{
 		Run:   runDescribe,
 	},
 	{
-		Usage: "filter [-table] [-file] <criteria>",
+		Usage: "filter [-table] [-file] <expression>",
 		Short: "",
 		Run:   runFilter,
 	},
@@ -36,7 +37,7 @@ var commands = []*cli.Command{
 		Run:   runFormat,
 	},
 	{
-		Usage: "group [-table] [-file] <key> [<operation>...]",
+		Usage: "group [-table] [-file] <selection> [<operation>...]",
 		Short: "",
 		Run:   runGroup,
 	},
@@ -46,7 +47,7 @@ var commands = []*cli.Command{
 		Run:   runTranspose,
 	},
 	{
-		Usage: "cat [-table] [-width] [-column] <file,...>",
+		Usage: "cat [-table] [-width] [-column] <file...>",
 		Short: "",
 		Run:   runCat,
 	},
@@ -56,9 +57,20 @@ var commands = []*cli.Command{
 		Run:   runSort,
 	},
 	{
-		Usage: "split [-datadir] [-prefix] [-file] <selection> <predicate>",
+		Usage: "split [-datadir] [-prefix] [-file] <selection> <expression>",
 		Short: "",
 		Run:   runSplit,
+	},
+	{
+		Usage: "eval [-table] [-width] [-file] <expression...>",
+		Short: "",
+		Run:   runEval,
+	},
+	{
+		Usage: "show [-file] [-width] [-limit]",
+		Alias: []string{"table"},
+		Short: "",
+		Run:   runTable,
 	},
 }
 
@@ -104,11 +116,15 @@ func (c *Comma) String() string {
 }
 
 type Options struct {
-	Predicate string
 	File      string
-	Width     int
-	Table     bool
 	Separator Comma
+
+	Limit int
+	Width int
+	Table bool
+
+	Prefix  string
+	Datadir string
 }
 
 func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
@@ -138,7 +154,60 @@ func runSort(cmd *cli.Command, args []string) error {
 }
 
 func runSplit(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
+	o := Options{
+		Datadir:   os.TempDir(),
+		Separator: Comma(','),
+	}
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.StringVar(&o.Datadir, "datadir", o.Datadir, "")
+	cmd.Flag.StringVar(&o.Prefix, "prefix", o.Prefix, "")
+
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(o.Datadir, 0755); err != nil {
+		return err
+	}
+
+	sel, err := comma.ParseSelection(cmd.Flag.Arg(0))
+	if err != nil {
+		return fmt.Errorf("selection (key): %s", err)
+	}
+
+	r, err := o.Open("", nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	dumps := make(map[string]*Dumper)
+	for {
+		switch row, err := r.Next(); err {
+		case nil:
+			ds, id := selectKeys(sel, row)
+			if _, ok := dumps[id]; !ok {
+				file := strings.Join(ds, "_") + ".csv"
+				if o.Prefix != "" {
+					file = o.Prefix + "-" + file
+				}
+				f, err := os.Create(filepath.Join(o.Datadir, strings.ToLower(file)))
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+
+				dumps[id] = Dump(f, o.Width, false)
+			}
+			if err := dumps[id].Dump(row); err != nil {
+				return err
+			}
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
 }
 
 func runJoin(cmd *cli.Command, args []string) error {
@@ -147,6 +216,43 @@ func runJoin(cmd *cli.Command, args []string) error {
 
 func runCross(cmd *cli.Command, args []string) error {
 	return cmd.Flag.Parse(args)
+}
+
+func runEval(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
+}
+
+func runTable(cmd *cli.Command, args []string) error {
+	o := Options{
+		Separator: Comma(','),
+		Width:     DefaultWidth,
+	}
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Limit, "limit", 0, "show N first rows")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+	r, err := o.Open("", nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	dump := WriteRecords(os.Stdout, o.Width, true)
+	for i := 0; o.Limit <= 0 || i < o.Limit; i++ {
+		switch row, err := r.Next(); err {
+		case nil:
+			dump(row)
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
+	return nil
 }
 
 func runTranspose(cmd *cli.Command, args []string) error {
@@ -213,7 +319,7 @@ func parseAggr(vs []string) ([]Aggr, error) {
 		return nil, fmt.Errorf("no enough argument")
 	}
 	var as []Aggr
-	for i := 0; i < len(vs); i+=2 {
+	for i := 0; i < len(vs); i += 2 {
 		op, sel := vs[i], vs[i+1]
 		s, err := comma.ParseSelection(sel)
 		if err != nil {
@@ -477,4 +583,44 @@ func Line(table bool) *linewriter.Writer {
 		options = append(options, linewriter.AsCSV(false))
 	}
 	return linewriter.NewWriter(4096, options...)
+}
+
+type Dumper struct {
+	Width int
+
+	line  *linewriter.Writer
+	inner io.Writer
+
+	io.Closer
+}
+
+func Dump(w io.Writer, width int, table bool) *Dumper {
+	d := Dumper{
+		line:  Line(table),
+		inner: w,
+		Width: width,
+	}
+	if c, ok := w.(io.Closer); ok {
+		d.Closer = c
+	}
+	return &d
+}
+
+func (d *Dumper) Close() error {
+	var err error
+	if d.Closer != nil {
+		err = d.Closer.Close()
+	}
+	return err
+}
+
+func (d *Dumper) Dump(row []string) error {
+	for i := 0; i < len(row); i++ {
+		d.line.AppendString(row[i], d.Width, linewriter.AlignRight)
+	}
+	n, err := io.Copy(d.inner, d.line)
+	if err == io.EOF && n > 0 {
+		err = nil
+	}
+	return err
 }
