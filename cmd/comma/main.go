@@ -241,11 +241,11 @@ func runTable(cmd *cli.Command, args []string) error {
 	}
 	defer r.Close()
 
-	dump := WriteRecords(os.Stdout, o.Width, true)
+	dump := Dump(os.Stdout, o.Width, true)
 	for i := 0; o.Limit <= 0 || i < o.Limit; i++ {
 		switch row, err := r.Next(); err {
 		case nil:
-			dump(row)
+			dump.Dump(row)
 		case io.EOF:
 			return nil
 		default:
@@ -285,9 +285,11 @@ func runTranspose(cmd *cli.Command, args []string) error {
 				rows[i] = append(rows[i], r)
 			}
 		case io.EOF:
-			dump := WriteRecords(os.Stdout, o.Width, o.Table)
+			dump := Dump(os.Stdout, o.Width, o.Table)
 			for _, r := range rows {
-				dump(r)
+				if err := dump.Dump(r); err != nil {
+					return err
+				}
 			}
 			return nil
 		default:
@@ -468,11 +470,11 @@ func runFormat(cmd *cli.Command, args []string) error {
 	}
 	defer r.Close()
 
-	dump := WriteRecords(os.Stdout, o.Width, o.Table)
+	dump := Dump(os.Stdout, o.Width, o.Table)
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
-			dump(row)
+			dump.Dump(row)
 		case io.EOF:
 			return nil
 		default:
@@ -507,11 +509,11 @@ func runFilter(cmd *cli.Command, args []string) error {
 	}
 	defer r.Close()
 
-	dump := WriteRecords(os.Stdout, o.Width, o.Table)
+	dump := Dump(os.Stdout, o.Width, o.Table)
 	for {
 		switch row, err := r.Filter(match); err {
 		case nil:
-			dump(row)
+			dump.Dump(row)
 		case io.EOF:
 			return nil
 		default:
@@ -543,11 +545,11 @@ func runSelect(cmd *cli.Command, args []string) error {
 	}
 	defer r.Close()
 
-	dump := WriteRecords(os.Stdout, o.Width, o.Table)
+	dump := Dump(os.Stdout, o.Width, o.Table)
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
-			dump(row)
+			dump.Dump(row)
 		case io.EOF:
 			return nil
 		default:
@@ -556,21 +558,7 @@ func runSelect(cmd *cli.Command, args []string) error {
 	}
 }
 
-const DefaultWidth = 16
-
-func WriteRecords(w io.Writer, width int, table bool) func([]string) error {
-	if width <= 0 {
-		width = DefaultWidth
-	}
-	line := Line(table)
-	return func(records []string) error {
-		for i := 0; i < len(records); i++ {
-			line.AppendString(records[i], width, linewriter.AlignRight)
-		}
-		_, err := io.Copy(w, line)
-		return err
-	}
-}
+const DefaultWidth = 10
 
 func Line(table bool) *linewriter.Writer {
 	var options []linewriter.Option
@@ -595,6 +583,9 @@ type Dumper struct {
 }
 
 func Dump(w io.Writer, width int, table bool) *Dumper {
+	if width <= 0 {
+		width = DefaultWidth
+	}
 	d := Dumper{
 		line:  Line(table),
 		inner: w,
