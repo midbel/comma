@@ -55,6 +55,11 @@ var commands = []*cli.Command{
 		Short: "",
 		Run:   runSort,
 	},
+	{
+		Usage: "split [-datadir] [-prefix] [-file] <selection> <predicate>",
+		Short: "",
+		Run:   runSplit,
+	},
 }
 
 const helpText = `{{.Name}} helps you to explore your data stored in csv files
@@ -129,6 +134,10 @@ func runCat(cmd *cli.Command, args []string) error {
 }
 
 func runSort(cmd *cli.Command, args []string) error {
+	return cmd.Flag.Parse(args)
+}
+
+func runSplit(cmd *cli.Command, args []string) error {
 	return cmd.Flag.Parse(args)
 }
 

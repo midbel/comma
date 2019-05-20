@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -68,6 +69,8 @@ func WithFormatters(specifiers []string) Option {
 				f = formatDate(pattern, []string{"%Y-%m-%d", "%Y/%m/%d"})
 			case "datetime":
 				f = formatDate(pattern, []string{"%Y-%m-%d %H:%M:%S"})
+			case "duration":
+				f = formatDuration(pattern)
 			case "int":
 				f = formatInt(pattern)
 			case "float", "double", "number":
@@ -90,6 +93,24 @@ func WithFormatters(specifiers []string) Option {
 			r.formatters = append(r.formatters, formatter{Index: int(ix), Format: f})
 		}
 		return nil
+	}
+}
+
+func formatDuration(resolution string) func(string) (string, error) {
+	return func(v string) (string, error) {
+		d, err := time.ParseDuration(v)
+		if err == nil {
+			switch resolution {
+			case "", "seconds":
+				if d < time.Second {
+					d = time.Second
+				}
+				v = fmt.Sprintf("%.0f", d.Seconds())
+			case "minutes":
+				v = fmt.Sprintf("%.0f", d.Minutes())
+			}
+		}
+		return v, err
 	}
 }
 
@@ -129,7 +150,13 @@ func formatInt(pattern string) func(string) (string, error) {
 	return func(v string) (string, error) {
 		i, err := strconv.ParseInt(v, 0, 64)
 		if err == nil {
-			v = fmt.Sprintf(pattern, i)
+			switch pattern {
+			case "seconds":
+				d := time.Duration(i) * time.Second
+				v = d.String()
+			default:
+				v = fmt.Sprintf(pattern, i)
+			}
 		}
 		return v, err
 	}
