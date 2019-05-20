@@ -368,6 +368,7 @@ func runGroup(cmd *cli.Command, args []string) error {
 	cmd.Flag.Var(&o.Separator, "separator", "separator")
 	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.BoolVar(&o.Append, "count", false, "append count column per group")
 	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
 
 	if err := cmd.Flag.Parse(args); err != nil {
@@ -420,7 +421,9 @@ func runGroup(cmd *cli.Command, args []string) error {
 				for _, v := range r.Keys {
 					line.AppendString(v, o.Width, linewriter.AlignRight)
 				}
-				line.AppendUint(r.Count, o.Width, linewriter.AlignRight)
+				if o.Append {
+					line.AppendUint(r.Count, o.Width, linewriter.AlignRight)
+				}
 				for _, d := range r.Data {
 					for _, r := range d.Result() {
 						line.AppendFloat(r, o.Width, 2, linewriter.AlignRight|linewriter.Float)
