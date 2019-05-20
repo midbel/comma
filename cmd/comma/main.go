@@ -123,6 +123,7 @@ type Options struct {
 	Width int
 	Table bool
 
+	Append  bool
 	Prefix  string
 	Datadir string
 }
@@ -159,8 +160,10 @@ func runSplit(cmd *cli.Command, args []string) error {
 		Separator: Comma(','),
 	}
 	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.BoolVar(&o.Append, "append", false, "append")
 	cmd.Flag.StringVar(&o.Datadir, "datadir", o.Datadir, "")
 	cmd.Flag.StringVar(&o.Prefix, "prefix", o.Prefix, "")
+	cmd.Flag.StringVar(&o.File, "file", o.File, "")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -197,7 +200,11 @@ func runSplit(cmd *cli.Command, args []string) error {
 				if o.Prefix != "" {
 					file = o.Prefix + "-" + file
 				}
-				f, err := os.Create(filepath.Join(o.Datadir, strings.ToLower(file)))
+				mode := os.O_CREATE|os.O_WRONLY
+				if o.Append {
+					mode = mode | os.O_APPEND
+				}
+				f, err := os.OpenFile(filepath.Join(o.Datadir, strings.ToLower(file)), mode, 0644)
 				if err != nil {
 					return err
 				}

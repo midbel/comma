@@ -30,7 +30,7 @@ type Option func(*Reader) error
 
 func WithSeparator(c rune) Option {
 	return func(r *Reader) error {
-		if unicode.IsPunct(c) || c == ' ' || c == '\t' {
+		if unicode.IsPunct(c) || c == '|' || c == ' ' || c == '\t' {
 			r.inner.Comma = c
 		} else {
 			return fmt.Errorf("invalid separator %c", c)
