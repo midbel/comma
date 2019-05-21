@@ -599,7 +599,7 @@ func (s Selection) selectSingle(values []string) ([]string, error) {
 	if i := s.start - 1; i < 0 || i >= len(values) {
 		return nil, ErrRange
 	} else {
-		return []string{values[i]}, nil
+		return values[i : i+1], nil
 	}
 }
 

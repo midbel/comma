@@ -479,6 +479,9 @@ func runGroup(cmd *cli.Command, args []string) error {
 		switch row, err := r.Next(); err {
 		case nil:
 			keys, id := selectKeys(sel, row)
+			if len(keys) == 0 {
+				continue
+			}
 			ix := sort.Search(len(rows), func(i int) bool { return rows[i].Hash <= id })
 			if ix < len(rows) && rows[ix].Hash == id {
 				rows[ix].Count++
@@ -526,6 +529,31 @@ func runGroup(cmd *cli.Command, args []string) error {
 	}
 }
 
+func selectKeys(sel []comma.Selection, row []string) ([]string, string) {
+	ds := make([]string, 0, len(sel)+1)
+	for _, s := range sel {
+		vs, err := s.Select(row)
+		if err != nil {
+			return nil, ""
+		}
+		ds = append(ds, vs...)
+	}
+	return ds, strings.Join(ds, "/")
+}
+
+// var (
+// 	bernseed = uint64(5381)
+// 	bernfact = uint64(33)
+// )
+//
+// func bernstein(bs []byte) uint64 {
+// 	hs := bernseed //uint64(5381)
+// 	for i := 0; i < len(bs); i++ {
+// 		hs = bernfact*hs + uint64(bs[i])
+// 	}
+// 	return hs
+// }
+
 type Row struct {
 	Count uint64
 	Keys  []string
@@ -541,18 +569,6 @@ func (r *Row) Update(row []string) error {
 		}
 	}
 	return nil
-}
-
-func selectKeys(sel []comma.Selection, row []string) ([]string, string) {
-	var ds []string
-	for _, s := range sel {
-		vs, err := s.Select(row)
-		if err != nil {
-			return nil, ""
-		}
-		ds = append(ds, vs...)
-	}
-	return ds, strings.Join(ds, "/")
 }
 
 func runFormat(cmd *cli.Command, args []string) error {
