@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"io"
 	"os"
@@ -47,7 +48,7 @@ var commands = []*cli.Command{
 		Run:   runTranspose,
 	},
 	{
-		Usage: "cat [-table] [-width] [-column] <file...>",
+		Usage: "cat [-append] [-table] [-width] [-separator] <file...>",
 		Short: "",
 		Run:   runCat,
 	},
@@ -147,7 +148,94 @@ func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
 }
 
 func runCat(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
+	o := Options{
+		Separator: Comma(','),
+	}
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.BoolVar(&o.Append, "append", false, "append")
+	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+	var cat func([]string, Options) error
+	if o.Append {
+		cat = appendRows
+	} else {
+		cat = appendColumns
+	}
+	return cat(cmd.Flag.Args(), o)
+}
+
+func appendRows(files []string, o Options) error {
+	var rs []io.Reader
+	for _, f := range files {
+		r, err := os.Open(f)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		rs = append(rs, r)
+	}
+	dump := Dump(os.Stdout, o.Width, o.Table)
+
+	rc := csv.NewReader(io.MultiReader(rs...))
+	rc.Comma = o.Separator.Rune()
+	for {
+		switch row, err := rc.Read(); err {
+		case nil:
+			dump.Dump(row)
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
+}
+
+func appendColumns(files []string, o Options) error {
+	rs := make([]*csv.Reader, len(files))
+	for i, f := range files {
+		r, err := os.Open(f)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+
+		rs[i] = csv.NewReader(r)
+		rs[i].Comma = o.Separator.Rune()
+	}
+
+	cols := make([][]string, len(rs))
+
+	var done int
+	dump := Dump(os.Stdout, o.Width, o.Table)
+	for {
+		var row []string
+		for i := 0; i < len(rs); i++ {
+			if rs == nil {
+				row = append(row, cols[i]...)
+				continue
+			}
+			switch vs, err := rs[i].Read(); err {
+			case nil:
+				row = append(row, vs...)
+				if len(cols[i]) == 0 {
+					cols[i] = make([]string, len(vs))
+				}
+			case io.EOF:
+				done++
+				rs[i] = nil
+				if done == len(rs) {
+					return nil
+				}
+			default:
+				return err
+			}
+		}
+		dump.Dump(row)
+	}
+	return nil
 }
 
 func runSort(cmd *cli.Command, args []string) error {
@@ -200,7 +288,7 @@ func runSplit(cmd *cli.Command, args []string) error {
 				if o.Prefix != "" {
 					file = o.Prefix + "-" + file
 				}
-				mode := os.O_CREATE|os.O_WRONLY
+				mode := os.O_CREATE | os.O_WRONLY
 				if o.Append {
 					mode = mode | os.O_APPEND
 				}
