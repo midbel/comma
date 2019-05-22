@@ -552,6 +552,144 @@ func runFrequency(cmd *cli.Command, args []string) error {
 	}
 }
 
+type Node struct {
+	*Row
+	Left  *Node
+	Right *Node
+}
+
+func newNode(r *Row) *Node {
+	return &Node{Row: r}
+}
+
+type Tree struct {
+	root *Node
+	Ops  []string
+	Sel  []comma.Selection
+}
+
+func (t *Tree) Find(ks []string) *Row {
+	if t.root == nil {
+		return nil
+	}
+	return t.root.Find(ks)
+}
+
+func (t *Tree) Upsert(vs []string) error {
+	ks := t.selectKeys(vs)
+	if len(ks) == 0 {
+		return nil
+	}
+	var r *Row
+	if t.root == nil {
+		t.root = nodeFromKeys(ks)
+		r = t.root.Row
+	} else {
+		r = t.root.Upsert(ks)
+	}
+	if len(r.Data) == 0 {
+		as, err := parseAggr(t.Ops)
+		if err != nil {
+			return err
+		}
+		r.Data = append(r.Data, as...)
+	}
+	return r.Update(vs)
+}
+
+func (t *Tree) selectKeys(row []string) []string {
+	ds := make([]string, 0, len(t.Sel)+1)
+	for i := 0; i < len(t.Sel); i++ {
+		vs, err := t.Sel[i].Select(row)
+		if err != nil {
+			return nil
+		}
+		ds = append(ds, vs...)
+	}
+	return ds
+}
+
+func (t *Tree) Traverse(fn func(r *Row)) {
+	if t.root == nil {
+		return
+	} else {
+		t.root.Traverse(fn)
+	}
+}
+
+func compareKeys(k1, k2 []string) int {
+	for i := 0; i < len(k1); i++ {
+		if k1[i] == k2[i] {
+			continue
+		}
+		if k1[i] < k2[i] {
+			return -1
+		} else {
+			return 1
+		}
+	}
+	return 0
+}
+
+func (n *Node) Find(ks []string) *Row {
+	switch cmp := compareKeys(n.Keys, ks); cmp {
+	default:
+		return n.Row
+	case -1:
+		if n.IsLeaf() || n.Left == nil {
+			return nil
+		}
+		return n.Left.Find(ks)
+	case 1:
+		if n.IsLeaf() || n.Right == nil {
+			return nil
+		}
+		return n.Right.Find(ks)
+	}
+}
+
+func nodeFromKeys(ks []string) *Node {
+	r := Row{Keys: ks}
+	return &Node{Row: &r}
+}
+
+func (n *Node) Upsert(ks []string) *Row {
+	var r *Row
+	switch cmp := compareKeys(n.Keys, ks); cmp {
+	default:
+		r = n.Row
+	case -1:
+		if n.IsLeaf() || n.Left == nil {
+			n.Left = nodeFromKeys(ks)
+			r = n.Left.Row
+		} else {
+			r = n.Left.Upsert(ks)
+		}
+	case 1:
+		if n.IsLeaf() || n.Right == nil {
+			n.Right = nodeFromKeys(ks)
+			r = n.Right.Row
+		} else {
+			r = n.Right.Upsert(ks)
+		}
+	}
+	return r
+}
+
+func (n *Node) Traverse(fn func(*Row)) {
+	if !n.IsLeaf() && n.Left != nil {
+		n.Left.Traverse(fn)
+	}
+	fn(n.Row)
+	if !n.IsLeaf() && n.Right != nil {
+		n.Right.Traverse(fn)
+	}
+}
+
+func (n *Node) IsLeaf() bool {
+	return n.Left == nil && n.Right == nil
+}
+
 func runGroup(cmd *cli.Command, args []string) error {
 	o := Options{
 		Separator: Comma(','),
@@ -576,42 +714,17 @@ func runGroup(cmd *cli.Command, args []string) error {
 	}
 	defer r.Close()
 
-	var rows []Row
 	ops := cmd.Flag.Args()
+	data := Tree{Ops: ops[1:], Sel: sel}
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
-			keys, id := selectKeys(sel, row)
-			if len(keys) == 0 {
-				continue
-			}
-			ix := sort.Search(len(rows), func(i int) bool { return rows[i].Hash <= id })
-			if ix < len(rows) && rows[ix].Hash == id {
-				rows[ix].Count++
-			} else {
-				r := Row{
-					Hash:  id,
-					Keys:  keys,
-					Count: 1,
-				}
-				as, err := parseAggr(ops[1:])
-				if err != nil {
-					return err
-				}
-				r.Data = append(r.Data, as...)
-				if ix >= len(rows) {
-					rows = append(rows, r)
-				} else {
-					rows = append(rows[:ix], append([]Row{r}, rows[ix:]...)...)
-				}
-			}
-			if err := rows[ix].Update(row); err != nil {
+			if err := data.Upsert(row); err != nil {
 				return err
 			}
 		case io.EOF:
 			line := Line(o.Table)
-			for i := range rows {
-				r := rows[i]
+			data.Traverse(func(r *Row) {
 				for _, v := range r.Keys {
 					line.AppendString(v, o.Width, linewriter.AlignRight)
 				}
@@ -621,7 +734,7 @@ func runGroup(cmd *cli.Command, args []string) error {
 					}
 				}
 				io.Copy(os.Stdout, line)
-			}
+			})
 			return nil
 		default:
 			return err
