@@ -43,6 +43,12 @@ var commands = []*cli.Command{
 		Run:   runGroup,
 	},
 	{
+		Usage: "frequency [-table] [-file] <selection>",
+		Alias: []string{"freq"},
+		Short: "",
+		Run:   runFrequency,
+	},
+	{
 		Usage: "transpose [-table] [-file]",
 		Short: "",
 		Run:   runTranspose,
@@ -400,7 +406,8 @@ func runTranspose(cmd *cli.Command, args []string) error {
 }
 
 type Aggr struct {
-	sel []comma.Selection
+	sel    []comma.Selection
+	single bool
 	comma.Aggr
 }
 
@@ -409,6 +416,9 @@ func (a *Aggr) Update(row []string) error {
 		rs, err := s.Select(row)
 		if err != nil {
 			return err
+		}
+		if a.single && len(rs) > 0 {
+			rs = rs[:1]
 		}
 		if err := a.Aggr.Aggr(rs); err != nil {
 			return err
@@ -446,6 +456,100 @@ func parseAggr(vs []string) ([]Aggr, error) {
 		as = append(as, Aggr{sel: s, Aggr: a})
 	}
 	return as, nil
+}
+
+func runFrequency(cmd *cli.Command, args []string) error {
+	o := Options{
+		Separator: Comma(','),
+		Width:     DefaultWidth,
+	}
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.BoolVar(&o.Append, "count", false, "append count column per group")
+	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+	sel, err := comma.ParseSelection(cmd.Flag.Arg(0))
+	if err != nil {
+		return fmt.Errorf("selection (key): %s", err)
+	}
+
+	r, err := o.Open("", nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	var rows []Row
+	cumul := Aggr{
+		sel:    sel,
+		single: true,
+		Aggr:   comma.Count(),
+	}
+	for {
+		switch row, err := r.Next(); err {
+		case nil:
+			keys, id := selectKeys(sel, row)
+			if len(keys) == 0 {
+				continue
+			}
+			ix := sort.Search(len(rows), func(i int) bool { return rows[i].Hash <= id })
+			if ix < len(rows) && rows[ix].Hash == id {
+				rows[ix].Count++
+			} else {
+				a := Aggr{
+					sel:    sel,
+					single: true,
+					Aggr:   comma.Count(),
+				}
+				r := Row{
+					Hash:  id,
+					Keys:  keys,
+					Count: 1,
+					Data:  []Aggr{a},
+				}
+				if ix >= len(rows) {
+					rows = append(rows, r)
+				} else {
+					rows = append(rows[:ix], append([]Row{r}, rows[ix:]...)...)
+				}
+			}
+			if err := rows[ix].Update(row); err != nil {
+				return err
+			}
+			if err := cumul.Update(row); err != nil {
+				return err
+			}
+		case io.EOF:
+			line, results := Line(o.Table), cumul.Result()
+			sums := make([]float64, len(results))
+			percents := make([]float64, len(results))
+			for i := range rows {
+				r := rows[i]
+				for _, v := range r.Keys {
+					line.AppendString(v, o.Width, linewriter.AlignRight)
+				}
+				for _, d := range r.Data {
+					for i, r := range d.Result() {
+						sums[i] += r
+						percent := r / results[i]
+						percents[i] += percent
+						line.AppendFloat(r, o.Width, 2, linewriter.AlignRight|linewriter.Float)
+						line.AppendFloat(sums[i], o.Width, 2, linewriter.AlignRight|linewriter.Float)
+						line.AppendPercent(percent, o.Width, 2, linewriter.AlignRight)
+						line.AppendPercent(percents[i], o.Width, 2, linewriter.AlignRight)
+					}
+				}
+				io.Copy(os.Stdout, line)
+			}
+			return nil
+		default:
+			return err
+		}
+	}
 }
 
 func runGroup(cmd *cli.Command, args []string) error {
@@ -540,19 +644,6 @@ func selectKeys(sel []comma.Selection, row []string) ([]string, string) {
 	}
 	return ds, strings.Join(ds, "/")
 }
-
-// var (
-// 	bernseed = uint64(5381)
-// 	bernfact = uint64(33)
-// )
-//
-// func bernstein(bs []byte) uint64 {
-// 	hs := bernseed //uint64(5381)
-// 	for i := 0; i < len(bs); i++ {
-// 		hs = bernfact*hs + uint64(bs[i])
-// 	}
-// 	return hs
-// }
 
 type Row struct {
 	Count uint64
