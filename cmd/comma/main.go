@@ -744,7 +744,6 @@ func parseAggr(vs []string) ([]Aggr, error) {
 }
 
 type Row struct {
-	Count uint64
 	Keys  []string
 	Hash  string
 
