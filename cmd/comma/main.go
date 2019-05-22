@@ -13,6 +13,7 @@ import (
 	"github.com/midbel/cli"
 	"github.com/midbel/comma"
 	"github.com/midbel/linewriter"
+	// "github.com/pkg/profile"
 )
 
 var commands = []*cli.Command{
@@ -474,6 +475,7 @@ func runFrequency(cmd *cli.Command, args []string) error {
 }
 
 func runGroup(cmd *cli.Command, args []string) error {
+	// defer profile.Start(profile.CPUProfile).Stop()
 	o := Options{
 		Separator: Comma(','),
 		Width:     DefaultWidth,
@@ -744,8 +746,8 @@ func parseAggr(vs []string) ([]Aggr, error) {
 }
 
 type Row struct {
-	Keys  []string
-	Hash  string
+	Keys []string
+	Hash string
 
 	Data []Aggr
 }
@@ -856,14 +858,14 @@ func (n *Node) Upsert(ks []string) *Row {
 	default:
 		r = n.Row
 	case -1:
-		if n.IsLeaf() || n.Left == nil {
+		if n.Left == nil {
 			n.Left = nodeFromKeys(ks)
 			r = n.Left.Row
 		} else {
 			r = n.Left.Upsert(ks)
 		}
 	case 1:
-		if n.IsLeaf() || n.Right == nil {
+		if n.Right == nil {
 			n.Right = nodeFromKeys(ks)
 			r = n.Right.Row
 		} else {
@@ -889,13 +891,9 @@ func (n *Node) IsLeaf() bool {
 
 func compareKeys(k1, k2 []string) int {
 	for i := 0; i < len(k1); i++ {
-		if k1[i] == k2[i] {
-			continue
-		}
-		if k1[i] < k2[i] {
-			return -1
-		} else {
-			return 1
+		c := strings.Compare(k1[i], k2[i])
+		if c != 0 {
+			return c
 		}
 	}
 	return 0
