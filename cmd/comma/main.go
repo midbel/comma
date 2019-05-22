@@ -405,59 +405,6 @@ func runTranspose(cmd *cli.Command, args []string) error {
 	}
 }
 
-type Aggr struct {
-	sel    []comma.Selection
-	single bool
-	comma.Aggr
-}
-
-func (a *Aggr) Update(row []string) error {
-	for _, s := range a.sel {
-		rs, err := s.Select(row)
-		if err != nil {
-			return err
-		}
-		if a.single && len(rs) > 0 {
-			rs = rs[:1]
-		}
-		if err := a.Aggr.Aggr(rs); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func parseAggr(vs []string) ([]Aggr, error) {
-	if mod := len(vs) % 2; mod != 0 {
-		return nil, fmt.Errorf("no enough argument")
-	}
-	var as []Aggr
-	for i := 0; i < len(vs); i += 2 {
-		op, sel := vs[i], vs[i+1]
-		s, err := comma.ParseSelection(sel)
-		if err != nil {
-			return nil, err
-		}
-		var a comma.Aggr
-		switch strings.ToLower(op) {
-		case "mean":
-			a = comma.Mean()
-		case "sum", "cum":
-			a = comma.Sum()
-		case "min":
-			a = comma.Min()
-		case "max":
-			a = comma.Max()
-		case "count":
-			a = comma.Count()
-		default:
-			return nil, fmt.Errorf("unknown operation %s", op)
-		}
-		as = append(as, Aggr{sel: s, Aggr: a})
-	}
-	return as, nil
-}
-
 func runFrequency(cmd *cli.Command, args []string) error {
 	o := Options{
 		Separator: Comma(','),
@@ -526,157 +473,6 @@ func runFrequency(cmd *cli.Command, args []string) error {
 	}
 }
 
-type Node struct {
-	*Row
-	Left  *Node
-	Right *Node
-}
-
-func newNode(r *Row) *Node {
-	return &Node{Row: r}
-}
-
-type Tree struct {
-	root *Node
-	Ops  []string
-	Sel  []comma.Selection
-}
-
-func (t *Tree) Find(ks []string) *Row {
-	if t.root == nil {
-		return nil
-	}
-	return t.root.Find(ks)
-}
-
-func (t *Tree) Upsert(vs []string) error {
-	ks := t.selectKeys(vs)
-	if len(ks) == 0 {
-		return nil
-	}
-	var r *Row
-	if t.root == nil {
-		t.root = nodeFromKeys(ks)
-		r = t.root.Row
-	} else {
-		r = t.root.Upsert(ks)
-	}
-	if len(r.Data) == 0 {
-		var (
-			as  []Aggr
-			err error
-		)
-		if len(t.Ops) == 0 {
-			a := Aggr{
-				sel:    t.Sel,
-				single: true,
-				Aggr:   comma.Count(),
-			}
-			as = []Aggr{a}
-		} else {
-			as, err = parseAggr(t.Ops)
-		}
-		if err != nil {
-			return err
-		}
-		r.Data = append(r.Data, as...)
-	}
-	return r.Update(vs)
-}
-
-func (t *Tree) selectKeys(row []string) []string {
-	ds := make([]string, 0, len(t.Sel)+1)
-	for i := 0; i < len(t.Sel); i++ {
-		vs, err := t.Sel[i].Select(row)
-		if err != nil {
-			return nil
-		}
-		ds = append(ds, vs...)
-	}
-	return ds
-}
-
-func (t *Tree) Traverse(fn func(r *Row)) {
-	if t.root == nil {
-		return
-	} else {
-		t.root.Traverse(fn)
-	}
-}
-
-func compareKeys(k1, k2 []string) int {
-	for i := 0; i < len(k1); i++ {
-		if k1[i] == k2[i] {
-			continue
-		}
-		if k1[i] < k2[i] {
-			return -1
-		} else {
-			return 1
-		}
-	}
-	return 0
-}
-
-func (n *Node) Find(ks []string) *Row {
-	switch cmp := compareKeys(n.Keys, ks); cmp {
-	default:
-		return n.Row
-	case -1:
-		if n.IsLeaf() || n.Left == nil {
-			return nil
-		}
-		return n.Left.Find(ks)
-	case 1:
-		if n.IsLeaf() || n.Right == nil {
-			return nil
-		}
-		return n.Right.Find(ks)
-	}
-}
-
-func nodeFromKeys(ks []string) *Node {
-	r := Row{Keys: ks}
-	return &Node{Row: &r}
-}
-
-func (n *Node) Upsert(ks []string) *Row {
-	var r *Row
-	switch cmp := compareKeys(n.Keys, ks); cmp {
-	default:
-		r = n.Row
-	case -1:
-		if n.IsLeaf() || n.Left == nil {
-			n.Left = nodeFromKeys(ks)
-			r = n.Left.Row
-		} else {
-			r = n.Left.Upsert(ks)
-		}
-	case 1:
-		if n.IsLeaf() || n.Right == nil {
-			n.Right = nodeFromKeys(ks)
-			r = n.Right.Row
-		} else {
-			r = n.Right.Upsert(ks)
-		}
-	}
-	return r
-}
-
-func (n *Node) Traverse(fn func(*Row)) {
-	if !n.IsLeaf() && n.Left != nil {
-		n.Left.Traverse(fn)
-	}
-	fn(n.Row)
-	if !n.IsLeaf() && n.Right != nil {
-		n.Right.Traverse(fn)
-	}
-}
-
-func (n *Node) IsLeaf() bool {
-	return n.Left == nil && n.Right == nil
-}
-
 func runGroup(cmd *cli.Command, args []string) error {
 	o := Options{
 		Separator: Comma(','),
@@ -727,35 +523,6 @@ func runGroup(cmd *cli.Command, args []string) error {
 			return err
 		}
 	}
-}
-
-func selectKeys(sel []comma.Selection, row []string) ([]string, string) {
-	ds := make([]string, 0, len(sel)+1)
-	for _, s := range sel {
-		vs, err := s.Select(row)
-		if err != nil {
-			return nil, ""
-		}
-		ds = append(ds, vs...)
-	}
-	return ds, strings.Join(ds, "/")
-}
-
-type Row struct {
-	Count uint64
-	Keys  []string
-	Hash  string
-
-	Data []Aggr
-}
-
-func (r *Row) Update(row []string) error {
-	for _, d := range r.Data {
-		if err := d.Update(row); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func runFormat(cmd *cli.Command, args []string) error {
@@ -921,4 +688,233 @@ func (d *Dumper) Dump(row []string) error {
 		err = nil
 	}
 	return err
+}
+
+type Aggr struct {
+	sel    []comma.Selection
+	single bool
+	comma.Aggr
+}
+
+func (a *Aggr) Update(row []string) error {
+	for _, s := range a.sel {
+		rs, err := s.Select(row)
+		if err != nil {
+			return err
+		}
+		if a.single && len(rs) > 0 {
+			rs = rs[:1]
+		}
+		if err := a.Aggr.Aggr(rs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func parseAggr(vs []string) ([]Aggr, error) {
+	if mod := len(vs) % 2; mod != 0 {
+		return nil, fmt.Errorf("no enough argument")
+	}
+	var as []Aggr
+	for i := 0; i < len(vs); i += 2 {
+		op, sel := vs[i], vs[i+1]
+		s, err := comma.ParseSelection(sel)
+		if err != nil {
+			return nil, err
+		}
+		var a comma.Aggr
+		switch strings.ToLower(op) {
+		case "mean":
+			a = comma.Mean()
+		case "sum", "cum":
+			a = comma.Sum()
+		case "min":
+			a = comma.Min()
+		case "max":
+			a = comma.Max()
+		case "count":
+			a = comma.Count()
+		default:
+			return nil, fmt.Errorf("unknown operation %s", op)
+		}
+		as = append(as, Aggr{sel: s, Aggr: a})
+	}
+	return as, nil
+}
+
+type Row struct {
+	Count uint64
+	Keys  []string
+	Hash  string
+
+	Data []Aggr
+}
+
+func (r *Row) Update(row []string) error {
+	for _, d := range r.Data {
+		if err := d.Update(row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type Tree struct {
+	root *Node
+	Ops  []string
+	Sel  []comma.Selection
+}
+
+func (t *Tree) Find(ks []string) *Row {
+	if t.root == nil {
+		return nil
+	}
+	return t.root.Find(ks)
+}
+
+func (t *Tree) Upsert(vs []string) error {
+	ks := t.selectKeys(vs)
+	if len(ks) == 0 {
+		return nil
+	}
+	var r *Row
+	if t.root == nil {
+		t.root = nodeFromKeys(ks)
+		r = t.root.Row
+	} else {
+		r = t.root.Upsert(ks)
+	}
+	if len(r.Data) == 0 {
+		var (
+			as  []Aggr
+			err error
+		)
+		if len(t.Ops) == 0 {
+			a := Aggr{
+				sel:    t.Sel,
+				single: true,
+				Aggr:   comma.Count(),
+			}
+			as = []Aggr{a}
+		} else {
+			as, err = parseAggr(t.Ops)
+		}
+		if err != nil {
+			return err
+		}
+		r.Data = append(r.Data, as...)
+	}
+	return r.Update(vs)
+}
+
+func (t *Tree) selectKeys(row []string) []string {
+	ds := make([]string, 0, len(t.Sel)+1)
+	for i := 0; i < len(t.Sel); i++ {
+		vs, err := t.Sel[i].Select(row)
+		if err != nil {
+			return nil
+		}
+		ds = append(ds, vs...)
+	}
+	return ds
+}
+
+func (t *Tree) Traverse(fn func(r *Row)) {
+	if t.root == nil {
+		return
+	} else {
+		t.root.Traverse(fn)
+	}
+}
+
+type Node struct {
+	*Row
+	Left  *Node
+	Right *Node
+}
+
+func (n *Node) Find(ks []string) *Row {
+	switch cmp := compareKeys(n.Keys, ks); cmp {
+	default:
+		return n.Row
+	case -1:
+		if n.IsLeaf() || n.Left == nil {
+			return nil
+		}
+		return n.Left.Find(ks)
+	case 1:
+		if n.IsLeaf() || n.Right == nil {
+			return nil
+		}
+		return n.Right.Find(ks)
+	}
+}
+
+func (n *Node) Upsert(ks []string) *Row {
+	var r *Row
+	switch cmp := compareKeys(n.Keys, ks); cmp {
+	default:
+		r = n.Row
+	case -1:
+		if n.IsLeaf() || n.Left == nil {
+			n.Left = nodeFromKeys(ks)
+			r = n.Left.Row
+		} else {
+			r = n.Left.Upsert(ks)
+		}
+	case 1:
+		if n.IsLeaf() || n.Right == nil {
+			n.Right = nodeFromKeys(ks)
+			r = n.Right.Row
+		} else {
+			r = n.Right.Upsert(ks)
+		}
+	}
+	return r
+}
+
+func (n *Node) Traverse(fn func(*Row)) {
+	if !n.IsLeaf() && n.Left != nil {
+		n.Left.Traverse(fn)
+	}
+	fn(n.Row)
+	if !n.IsLeaf() && n.Right != nil {
+		n.Right.Traverse(fn)
+	}
+}
+
+func (n *Node) IsLeaf() bool {
+	return n.Left == nil && n.Right == nil
+}
+
+func compareKeys(k1, k2 []string) int {
+	for i := 0; i < len(k1); i++ {
+		if k1[i] == k2[i] {
+			continue
+		}
+		if k1[i] < k2[i] {
+			return -1
+		} else {
+			return 1
+		}
+	}
+	return 0
+}
+
+func nodeFromKeys(ks []string) *Node {
+	r := Row{Keys: ks}
+	return &Node{Row: &r}
+}
+
+func selectKeys(sel []comma.Selection, row []string) ([]string, string) {
+	ds := make([]string, 0, len(sel)+1)
+	for _, s := range sel {
+		vs, err := s.Select(row)
+		if err != nil {
+			return nil, ""
+		}
+		ds = append(ds, vs...)
+	}
+	return ds, strings.Join(ds, "/")
 }
