@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	// "sort"
 	"strings"
 	"unicode/utf8"
 
@@ -483,41 +483,16 @@ func runFrequency(cmd *cli.Command, args []string) error {
 	}
 	defer r.Close()
 
-	var rows []Row
 	cumul := Aggr{
 		sel:    sel,
 		single: true,
 		Aggr:   comma.Count(),
 	}
+	data := Tree{Sel: sel}
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
-			keys, id := selectKeys(sel, row)
-			if len(keys) == 0 {
-				continue
-			}
-			ix := sort.Search(len(rows), func(i int) bool { return rows[i].Hash <= id })
-			if ix < len(rows) && rows[ix].Hash == id {
-				rows[ix].Count++
-			} else {
-				a := Aggr{
-					sel:    sel,
-					single: true,
-					Aggr:   comma.Count(),
-				}
-				r := Row{
-					Hash:  id,
-					Keys:  keys,
-					Count: 1,
-					Data:  []Aggr{a},
-				}
-				if ix >= len(rows) {
-					rows = append(rows, r)
-				} else {
-					rows = append(rows[:ix], append([]Row{r}, rows[ix:]...)...)
-				}
-			}
-			if err := rows[ix].Update(row); err != nil {
+			if err := data.Upsert(row); err != nil {
 				return err
 			}
 			if err := cumul.Update(row); err != nil {
@@ -527,8 +502,7 @@ func runFrequency(cmd *cli.Command, args []string) error {
 			line, results := Line(o.Table), cumul.Result()
 			sums := make([]float64, len(results))
 			percents := make([]float64, len(results))
-			for i := range rows {
-				r := rows[i]
+			data.Traverse(func(r *Row) {
 				for _, v := range r.Keys {
 					line.AppendString(v, o.Width, linewriter.AlignRight)
 				}
@@ -544,7 +518,7 @@ func runFrequency(cmd *cli.Command, args []string) error {
 					}
 				}
 				io.Copy(os.Stdout, line)
-			}
+			})
 			return nil
 		default:
 			return err
@@ -588,7 +562,20 @@ func (t *Tree) Upsert(vs []string) error {
 		r = t.root.Upsert(ks)
 	}
 	if len(r.Data) == 0 {
-		as, err := parseAggr(t.Ops)
+		var (
+			as  []Aggr
+			err error
+		)
+		if len(t.Ops) == 0 {
+			a := Aggr{
+				sel:    t.Sel,
+				single: true,
+				Aggr:   comma.Count(),
+			}
+			as = []Aggr{a}
+		} else {
+			as, err = parseAggr(t.Ops)
+		}
 		if err != nil {
 			return err
 		}
