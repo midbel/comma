@@ -2,18 +2,17 @@ package main
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	// "sort"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/midbel/cli"
 	"github.com/midbel/comma"
 	"github.com/midbel/linewriter"
-	// "github.com/pkg/profile"
 )
 
 var commands = []*cli.Command{
@@ -154,6 +153,28 @@ func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
 	return r, err
 }
 
+var ErrImplemented = errors.New("not yet implemented")
+
+func runSort(cmd *cli.Command, args []string) error {
+	return ErrImplemented
+}
+
+func runJoin(cmd *cli.Command, args []string) error {
+	return ErrImplemented
+}
+
+func runCross(cmd *cli.Command, args []string) error {
+	return ErrImplemented
+}
+
+func runEval(cmd *cli.Command, args []string) error {
+	return ErrImplemented
+}
+
+func runDescribe(cmd *cli.Command, args []string) error {
+	return ErrImplemented
+}
+
 func runCat(cmd *cli.Command, args []string) error {
 	o := Options{
 		Separator: Comma(','),
@@ -245,10 +266,6 @@ func appendColumns(files []string, o Options) error {
 	return nil
 }
 
-func runSort(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
-}
-
 func runSplit(cmd *cli.Command, args []string) error {
 	o := Options{
 		Datadir:   os.TempDir(),
@@ -316,18 +333,6 @@ func runSplit(cmd *cli.Command, args []string) error {
 			return err
 		}
 	}
-}
-
-func runJoin(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
-}
-
-func runCross(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
-}
-
-func runEval(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
 }
 
 func runTable(cmd *cli.Command, args []string) error {
@@ -596,10 +601,6 @@ func runFilter(cmd *cli.Command, args []string) error {
 			return err
 		}
 	}
-}
-
-func runDescribe(cmd *cli.Command, args []string) error {
-	return cmd.Flag.Parse(args)
 }
 
 func runSelect(cmd *cli.Command, args []string) error {
