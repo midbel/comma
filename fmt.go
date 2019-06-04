@@ -89,6 +89,10 @@ func formatFloat(pattern string) func(string) (string, error) {
 	return func(v string) (string, error) {
 		f, err := strconv.ParseFloat(v, 64)
 		if err == nil {
+			if pattern == "percent" {
+				f *= 100.0
+				pattern = "%.2f%%"
+			}
 			v = fmt.Sprintf(pattern, f)
 		}
 		return v, err
