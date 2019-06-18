@@ -2,6 +2,7 @@ package comma
 
 import (
 	"strconv"
+	"strings"
 )
 
 type Aggr interface {
@@ -31,7 +32,7 @@ func (m *min) Aggr(row []string) error {
 		}
 	}
 	for i, r := range row {
-		f, err := strconv.ParseFloat(r, 64)
+		f, err := parseFloat(r)
 		if err != nil {
 			return err
 		}
@@ -68,7 +69,7 @@ func (m *max) Aggr(row []string) error {
 		}
 	}
 	for i, r := range row {
-		f, err := strconv.ParseFloat(r, 64)
+		f, err := parseFloat(r)
 		if err != nil {
 			return err
 		}
@@ -104,7 +105,7 @@ func (s *sum) Aggr(vs []string) error {
 		}
 	}
 	for i, v := range vs {
-		f, err := strconv.ParseFloat(v, 64)
+		f, err := parseFloat(v)
 		if err != nil {
 			return err
 		}
@@ -179,4 +180,8 @@ func (m *mean) Result() []float64 {
 		cs[i] = vs[i] / c
 	}
 	return cs
+}
+
+func parseFloat(v string) (float64, error) {
+	return strconv.ParseFloat(strings.TrimSpace(v), 64)
 }
