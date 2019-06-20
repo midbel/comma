@@ -3,6 +3,8 @@ package comma
 import (
 	"encoding/base64"
 	"fmt"
+	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +16,35 @@ import (
 type formatter struct {
 	Index  int
 	Format func(string) (string, error)
+}
+
+func formatString(method string) func(string) (string, error) {
+	return func(v string) (string, error) {
+		switch method {
+		case "title":
+			v = strings.Title(v)
+		case "upper":
+			v = strings.ToUpper(v)
+		case "lower":
+			v = strings.ToLower(v)
+		case "base":
+			v = filepath.Base(v)
+		case "dir":
+			v = filepath.Dir(v)
+		case "ext":
+			v = filepath.Ext(v)
+		case "file":
+			v = strings.TrimSuffix(v, filepath.Ext(v))
+		case "random":
+			vs := []byte(v)
+			rand.Shuffle(len(vs), func(i, j int) {
+				vs[i], vs[j] = vs[j], vs[i]
+			})
+			v = string(vs)
+		default:
+		}
+		return v, nil
+	}
 }
 
 func formatDuration(resolution string) func(string) (string, error) {

@@ -72,6 +72,7 @@ func WithFormatters(specifiers []string) Option {
 			case "bool", "boolean":
 				f = formatBool(pattern)
 			case "string":
+				f = formatString(pattern)
 			case "base64":
 				f = formatBase64(pattern)
 			case "size":
