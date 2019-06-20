@@ -34,7 +34,7 @@ func formatString(method string) func(string) (string, error) {
 		case "ext":
 			v = filepath.Ext(v)
 		case "file":
-			v = strings.TrimSuffix(v, filepath.Ext(v))
+			v = strings.TrimSuffix(filepath.Base(v), filepath.Ext(v))
 		case "random":
 			vs := []byte(v)
 			rand.Shuffle(len(vs), func(i, j int) {
@@ -43,7 +43,7 @@ func formatString(method string) func(string) (string, error) {
 			v = string(vs)
 		default:
 		}
-		return v, nil
+		return strings.TrimSpace(v), nil
 	}
 }
 
