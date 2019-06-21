@@ -10,11 +10,13 @@ import (
 const (
 	colon   = ':'
 	virgule = ','
+	plus    = '+'
 )
 
 type Selection struct {
 	start    int
 	end      int
+	repeat   int
 	interval bool
 	open     bool
 }
@@ -85,11 +87,18 @@ func (s Selection) selectOpen(values []string) ([]string, error) {
 }
 
 func (s Selection) selectSingle(values []string) ([]string, error) {
-	if i := s.start - 1; i < 0 || i >= len(values) {
+	i := s.start - 1
+	if i < 0 || i >= len(values) {
 		return nil, ErrRange
-	} else {
+	}
+	if s.repeat <= 1 {
 		return values[i : i+1], nil
 	}
+	vs := make([]string, s.repeat)
+	for i := 0; i < s.repeat; i++ {
+		vs[i] = values[s.start-1]
+	}
+	return vs, nil
 }
 
 func parseSelection(v string) ([]Selection, error) {
@@ -98,6 +107,7 @@ func parseSelection(v string) ([]Selection, error) {
 	}
 	var (
 		n        int
+		repeat   int
 		cs       []Selection
 		str      bytes.Buffer
 		interval bool
@@ -123,7 +133,7 @@ func parseSelection(v string) ([]Selection, error) {
 			if n := len(cs); n > 0 && cs[n-1].interval && interval {
 				cs[n-1].end = i
 			} else {
-				cs = append(cs, Selection{start: i})
+				cs = append(cs, Selection{start: i, repeat: repeat})
 			}
 			interval = false
 
@@ -156,6 +166,18 @@ func parseSelection(v string) ([]Selection, error) {
 				}
 				n += nn
 				str.WriteRune(k)
+			}
+			if k, nn = utf8.DecodeRuneInString(v[n:]); k == plus {
+				repeat = 1
+				n += nn
+				for {
+					k, nn = utf8.DecodeRuneInString(v[n:])
+					if k != plus {
+						break
+					}
+					n += nn
+					repeat++
+				}
 			}
 		default:
 			return nil, ErrSyntax
