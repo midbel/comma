@@ -97,7 +97,7 @@ Use {{.Name}} [command] -h for more information about its usage.
 func main() {
 	defer func() {
 		if err := recover(); err != nil {
-			fmt.Fprintln(os.Stderr, "unexpected error: %s", err)
+			fmt.Fprintf(os.Stderr, "unexpected error: %s\n", err)
 			os.Exit(2)
 		}
 	}()
