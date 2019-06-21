@@ -759,7 +759,7 @@ func parseAggr(vs []string) ([]Aggr, error) {
 		}
 		var a comma.Aggr
 		switch strings.ToLower(op) {
-		case "mean":
+		case "mean", "avg":
 			a = comma.Mean()
 		case "sum", "cum":
 			a = comma.Sum()
