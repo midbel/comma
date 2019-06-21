@@ -17,7 +17,7 @@ import (
 
 var commands = []*cli.Command{
 	{
-		Usage: "select [-separator] [-table] [-file] <selection>",
+		Usage: "select [-separator] [-tag] [-table] [-file] <selection>",
 		Short: "",
 		Run:   runSelect,
 	},
@@ -27,23 +27,23 @@ var commands = []*cli.Command{
 		Run:   runDescribe,
 	},
 	{
-		Usage: "filter [-table] [-file] <expression>",
+		Usage: "filter [-table] [-tag] [-file] <expression>",
 		Short: "",
 		Run:   runFilter,
 	},
 	{
-		Usage: "format [-table] [-file] <selection...>",
+		Usage: "format [-table] [-tag] [-file] <selection...>",
 		Alias: []string{"fmt"},
 		Short: "",
 		Run:   runFormat,
 	},
 	{
-		Usage: "group [-table] [-file] <selection> [<operation>...]",
+		Usage: "group [-table] [-tag] [-file] <selection> [<operation>...]",
 		Short: "",
 		Run:   runGroup,
 	},
 	{
-		Usage: "frequency [-table] [-file] <selection>",
+		Usage: "frequency [-table] [-tag] [-file] <selection>",
 		Alias: []string{"freq"},
 		Short: "",
 		Run:   runFrequency,
@@ -74,7 +74,7 @@ var commands = []*cli.Command{
 		Run:   runEval,
 	},
 	{
-		Usage: "show [-file] [-width] [-limit]",
+		Usage: "show [-file] [-tag] [-width] [-limit]",
 		Alias: []string{"table"},
 		Short: "",
 		Run:   runTable,
@@ -139,6 +139,7 @@ type Options struct {
 	Append  bool
 	Prefix  string
 	Datadir string
+	Tag     string
 }
 
 func (o Options) Open(cols string, specs []string) (*comma.Reader, error) {
@@ -350,6 +351,7 @@ func runTable(cmd *cli.Command, args []string) error {
 	cmd.Flag.IntVar(&o.Limit, "limit", 0, "show N first rows")
 	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -364,6 +366,9 @@ func runTable(cmd *cli.Command, args []string) error {
 	for i := 0; o.Limit <= 0 || i < o.Limit; i++ {
 		switch row, err := r.Next(); err {
 		case nil:
+			if o.Tag != "" {
+				row = append([]string{o.Tag}, row...)
+			}
 			dump.Dump(row)
 		case io.EOF:
 			return nil
@@ -427,6 +432,7 @@ func runFrequency(cmd *cli.Command, args []string) error {
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
 	cmd.Flag.BoolVar(&o.Append, "count", false, "append count column per group")
 	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -462,6 +468,9 @@ func runFrequency(cmd *cli.Command, args []string) error {
 			sums := make([]float64, len(results))
 			percents := make([]float64, len(results))
 			data.Traverse(func(r *Row) {
+				if o.Tag != "" {
+					line.AppendString(o.Tag, o.Width, linewriter.AlignRight)
+				}
 				for _, v := range r.Keys {
 					line.AppendString(v, o.Width, linewriter.AlignRight)
 				}
@@ -495,6 +504,7 @@ func runGroup(cmd *cli.Command, args []string) error {
 	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
 	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -521,6 +531,9 @@ func runGroup(cmd *cli.Command, args []string) error {
 		case io.EOF:
 			line := Line(o.Table)
 			data.Traverse(func(r *Row) {
+				if o.Tag != "" {
+					line.AppendString(o.Tag, o.Width, linewriter.AlignRight)
+				}
 				for _, v := range r.Keys {
 					line.AppendString(v, o.Width, linewriter.AlignRight)
 				}
@@ -547,6 +560,7 @@ func runFormat(cmd *cli.Command, args []string) error {
 	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
 	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -561,6 +575,9 @@ func runFormat(cmd *cli.Command, args []string) error {
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
+			if o.Tag != "" {
+				row = append([]string{o.Tag}, row...)
+			}
 			dump.Dump(row)
 		case io.EOF:
 			return nil
@@ -582,6 +599,7 @@ func runFilter(cmd *cli.Command, args []string) error {
 	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
 	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -600,6 +618,9 @@ func runFilter(cmd *cli.Command, args []string) error {
 	for {
 		switch row, err := r.Filter(match); err {
 		case nil:
+			if o.Tag != "" {
+				row = append([]string{o.Tag}, row...)
+			}
 			dump.Dump(row)
 		case io.EOF:
 			return nil
@@ -618,6 +639,7 @@ func runSelect(cmd *cli.Command, args []string) error {
 	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
 	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
+	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -632,6 +654,9 @@ func runSelect(cmd *cli.Command, args []string) error {
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
+			if o.Tag != "" {
+				row = append([]string{o.Tag}, row...)
+			}
 			dump.Dump(row)
 		case io.EOF:
 			return nil
