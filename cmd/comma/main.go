@@ -95,6 +95,12 @@ Use {{.Name}} [command] -h for more information about its usage.
 `
 
 func main() {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Fprintln(os.Stderr, "unexpected error: %s", err)
+			os.Exit(2)
+		}
+	}()
 	err := cli.Run(commands, cli.Usage("comma", helpText, commands), nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
