@@ -80,32 +80,9 @@ func formatBase64(method string) func(string) (string, error) {
 func formatEnum(str string) func(string) (string, error) {
 	set := make(map[string]string)
 	if strings.HasPrefix(str, "@") {
-		if r, err := os.Open(str[1:]); err == nil {
-			defer r.Close()
-			s := bufio.NewScanner(r)
-			for s.Scan() {
-				txt := s.Text()
-				if len(txt) == 0 || strings.HasPrefix(txt, "#") {
-					continue
-				}
-				var key, val string
-				n, _ := fmt.Sscanf(txt, "%s %s", &key, &val)
-				if n != 2 {
-					continue
-				}
-				set[key] = val
-			}
-		}
+		enumFromFile(str[1:], set)
 	} else {
-		values := strings.FieldsFunc(str, func(r rune) bool { return r == '=' || r == ',' })
-		set = make(map[string]string)
-		for i := 0; i < len(values); i += 2 {
-			if i+1 >= len(values) {
-				return nil
-			}
-			k, v := strings.TrimSpace(values[i]), strings.TrimSpace(values[i+1])
-			set[k] = v
-		}
+		enumFromString(str, set)
 	}
 	return func(v string) (string, error) {
 		s, ok := set[v]
@@ -113,6 +90,49 @@ func formatEnum(str string) func(string) (string, error) {
 			s = v
 		}
 		return s, nil
+	}
+}
+
+func enumFromString(str string, set map[string]string) {
+	values := strings.FieldsFunc(str, func(r rune) bool { return r == '=' || r == ',' })
+
+	// var old string
+	for i := 0; i < len(values); i += 2 {
+		if i+1 >= len(values) {
+			break
+		}
+		k, v := strings.TrimSpace(values[i]), strings.TrimSpace(values[i+1])
+		fmt.Println("==>", k, v)
+		set[k] = v
+	}
+}
+
+func enumFromFile(file string, set map[string]string) {
+	r, err := os.Open(file)
+	if err != nil {
+		return
+	}
+	defer r.Close()
+
+	s := bufio.NewScanner(r)
+
+	var old string
+	for s.Scan() {
+		txt := s.Text()
+		if len(txt) == 0 || strings.HasPrefix(txt, "#") {
+			continue
+		}
+		var key, val string
+		n, _ := fmt.Sscanf(txt, "%s %s", &key, &val)
+		switch n {
+		default:
+			continue
+		case 1:
+			val = set[old]
+		case 2:
+			old = key
+		}
+		set[strings.TrimSpace(key)] = strings.TrimSpace(val)
 	}
 }
 
