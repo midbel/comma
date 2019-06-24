@@ -433,6 +433,7 @@ func runFrequency(cmd *cli.Command, args []string) error {
 	cmd.Flag.BoolVar(&o.Append, "count", false, "append count column per group")
 	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
 	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
+	reverse := cmd.Flag.Bool("reverse", false, "reverse")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -453,7 +454,10 @@ func runFrequency(cmd *cli.Command, args []string) error {
 		single: true,
 		Aggr:   comma.Count(),
 	}
-	data := Tree{Sel: sel}
+	data := Tree{
+		Sel:     sel,
+		Reverse: *reverse,
+	}
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
@@ -505,6 +509,7 @@ func runGroup(cmd *cli.Command, args []string) error {
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
 	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
 	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
+	reverse := cmd.Flag.Bool("reverse", false, "reverse")
 
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
@@ -521,7 +526,11 @@ func runGroup(cmd *cli.Command, args []string) error {
 	defer r.Close()
 
 	ops := cmd.Flag.Args()
-	data := Tree{Ops: ops[1:], Sel: sel}
+	data := Tree{
+		Ops:     ops[1:],
+		Sel:     sel,
+		Reverse: *reverse,
+	}
 	for {
 		switch row, err := r.Next(); err {
 		case nil:
@@ -797,6 +806,8 @@ type Tree struct {
 	root *Node
 	Ops  []string
 	Sel  []comma.Selection
+
+	Reverse bool
 }
 
 func (t *Tree) Find(ks []string) *Row {
@@ -816,7 +827,7 @@ func (t *Tree) Upsert(vs []string) error {
 		t.root = nodeFromKeys(ks)
 		r = t.root.Row
 	} else {
-		r = t.root.Upsert(ks)
+		r = t.root.Upsert(ks, t.Reverse)
 	}
 	if len(r.Data) == 0 {
 		var (
@@ -884,9 +895,13 @@ func (n *Node) Find(ks []string) *Row {
 	}
 }
 
-func (n *Node) Upsert(ks []string) *Row {
+func (n *Node) Upsert(ks []string, reverse bool) *Row {
 	var r *Row
-	switch cmp := compareKeys(n.Keys, ks); cmp {
+	cmp := compareKeys(n.Keys, ks)
+	if reverse {
+		cmp = -cmp
+	}
+	switch cmp {
 	default:
 		r = n.Row
 	case -1:
@@ -894,14 +909,14 @@ func (n *Node) Upsert(ks []string) *Row {
 			n.Left = nodeFromKeys(ks)
 			r = n.Left.Row
 		} else {
-			r = n.Left.Upsert(ks)
+			r = n.Left.Upsert(ks, reverse)
 		}
 	case 1:
 		if n.Right == nil {
 			n.Right = nodeFromKeys(ks)
 			r = n.Right.Row
 		} else {
-			r = n.Right.Upsert(ks)
+			r = n.Right.Upsert(ks, reverse)
 		}
 	}
 	return r
