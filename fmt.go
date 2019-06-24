@@ -1,9 +1,11 @@
 package comma
 
 import (
+	"bufio"
 	"encoding/base64"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -76,14 +78,34 @@ func formatBase64(method string) func(string) (string, error) {
 }
 
 func formatEnum(str string) func(string) (string, error) {
-	values := strings.FieldsFunc(str, func(r rune) bool { return r == '=' || r == ',' })
 	set := make(map[string]string)
-	for i := 0; i < len(values); i += 2 {
-		if i+1 >= len(values) {
-			return nil
+	if strings.HasPrefix(str, "@") {
+		if r, err := os.Open(str[1:]); err == nil {
+			defer r.Close()
+			s := bufio.NewScanner(r)
+			for s.Scan() {
+				txt := s.Text()
+				if len(txt) == 0 || strings.HasPrefix(txt, "#") {
+					continue
+				}
+				var key, val string
+				n, _ := fmt.Sscanf(txt, "%s %s", &key, &val)
+				if n != 2 {
+					continue
+				}
+				set[key] = val
+			}
 		}
-		k, v := strings.TrimSpace(values[i]), strings.TrimSpace(values[i+1])
-		set[k] = v
+	} else {
+		values := strings.FieldsFunc(str, func(r rune) bool { return r == '=' || r == ',' })
+		set = make(map[string]string)
+		for i := 0; i < len(values); i += 2 {
+			if i+1 >= len(values) {
+				return nil
+			}
+			k, v := strings.TrimSpace(values[i]), strings.TrimSpace(values[i+1])
+			set[k] = v
+		}
 	}
 	return func(v string) (string, error) {
 		s, ok := set[v]
