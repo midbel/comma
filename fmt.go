@@ -94,15 +94,38 @@ func formatEnum(str string) func(string) (string, error) {
 }
 
 func enumFromString(str string, set map[string]string) {
-	values := strings.FieldsFunc(str, func(r rune) bool { return r == '=' || r == ',' })
+	var (
+		values []string
+		prev   rune
+		cut    int
+	)
+	for i, s := range str {
+		if s == ',' || s == '=' {
+			if prev == '=' {
+				values = append(values, "")
+			} else {
+				values = append(values, str[cut:i])
+			}
+			cut = i + 1
+		}
+		prev = s
+	}
+	if cut > 0 && cut < len(str)-1 {
+		values = append(values, str[cut:])
+	}
+	// values := strings.FieldsFunc(str, func(r rune) bool { return r == '=' || r == ',' })
 
-	// var old string
+	var old string
 	for i := 0; i < len(values); i += 2 {
 		if i+1 >= len(values) {
 			break
 		}
 		k, v := strings.TrimSpace(values[i]), strings.TrimSpace(values[i+1])
-		fmt.Println("==>", k, v)
+		if len(v) == 0 {
+			v = set[old]
+		} else {
+			old = k
+		}
 		set[k] = v
 	}
 }
