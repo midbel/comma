@@ -5,10 +5,55 @@ import (
 	"strconv"
 )
 
-func ParseEval(str string) (Eval, error) {
-	i, left, err := scanIndexEval(str)
+type Eval interface {
+	Eval([]string) ([]string, error)
+}
 
-	var e Eval
+func Evaluate(vs []string) (Eval, error) {
+	es := make([]Eval, 0, len(vs))
+	for _, s := range vs {
+		e, err := ParseEval(s)
+		if err != nil {
+			return nil, err
+		}
+		es = append(es, e)
+	}
+	return multieval{es}, nil
+}
+
+func ParseEval(str string) (Eval, error) {
+	var (
+		j int
+		e eval
+	)
+	for j < len(str) && str[j] != '=' {
+		j++
+	}
+	if j == len(str) {
+		return nil, ErrSyntax
+	}
+
+	if j > 0 {
+		e.replace = str[0] == '%'
+
+		let := str[:j]
+		if e.replace {
+			let = let[1:]
+		}
+		if c, err := strconv.ParseInt(let, 10, 64); err != nil {
+			return nil, err
+		} else {
+			e.where = int(c - 1)
+		}
+	}
+	j++
+
+	i, left, err := scanIndexEval(str[j:])
+	if err != nil {
+		return nil, err
+	}
+	i += j
+
 	switch str[i] {
 	case '+':
 		e.apply = add
@@ -19,7 +64,7 @@ func ParseEval(str string) (Eval, error) {
 	case '*':
 		e.apply = multiply
 	default:
-		return e, fmt.Errorf("unknown operation %c", str[i])
+		return nil, fmt.Errorf("unknown operation %c", str[i])
 	}
 	i++
 	for i < len(str[i:]) {
@@ -31,7 +76,7 @@ func ParseEval(str string) (Eval, error) {
 	}
 	_, right, err := scanIndexEval(str[i:])
 	if err != nil {
-		return e, err
+		return nil, err
 	}
 	e.left, e.right = left, right
 	return e, nil
@@ -63,20 +108,47 @@ func scanIndexEval(str string) (int, int, error) {
 	return i, int(c), nil
 }
 
-type Eval struct {
+type multieval struct {
+	evals []Eval
+}
+
+func (e multieval) Eval(row []string) ([]string, error) {
+	var err error
+	for _, x := range e.evals {
+		row, err = x.Eval(row)
+		if err != nil {
+			break
+		}
+	}
+	return row, err
+}
+
+type eval struct {
 	left  int
 	right int
-	where int
+
+	replace bool
+	where   int
+
 	apply applyFunc
 }
 
-func (e Eval) Eval(row []string) ([]string, error) {
+func (e eval) Eval(row []string) ([]string, error) {
 	v, err := checkAndGet(e.left-1, e.right-1, row, e.apply)
 	if err == nil {
+		str := strconv.FormatFloat(v, 'f', -1, 64)
 		if e.where == 0 {
-
+			row = append(row, str)
+		} else {
+			if e.where < 0 || e.where >= len(row) {
+				return nil, ErrRange
+			}
+			if e.replace {
+				row[e.where] = str
+			} else {
+				row = append(row[:e.where], append([]string{str}, row[e.where:]...)...)
+			}
 		}
-		row = append(row, strconv.FormatFloat(v, 'f', -1, 64))
 	}
 	return row, err
 }

@@ -191,7 +191,7 @@ func runEval(cmd *cli.Command, args []string) error {
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
 	}
-	e, err := comma.ParseEval(cmd.Flag.Arg(0))
+	e, err := comma.Evaluate(cmd.Flag.Args())
 	if err != nil {
 		return err
 	}
