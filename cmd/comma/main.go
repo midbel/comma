@@ -455,7 +455,7 @@ func runFrequency(cmd *cli.Command, args []string) error {
 		Aggr:   comma.Count(),
 	}
 	data := Tree{
-		Sel: sel,
+		Sel:     sel,
 		Reverse: *reverse,
 	}
 	for {
@@ -527,8 +527,8 @@ func runGroup(cmd *cli.Command, args []string) error {
 
 	ops := cmd.Flag.Args()
 	data := Tree{
-		Ops: ops[1:],
-		Sel: sel,
+		Ops:     ops[1:],
+		Sel:     sel,
 		Reverse: *reverse,
 	}
 	for {

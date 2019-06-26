@@ -249,3 +249,14 @@ func formatDate(pattern string, fs []string) func(string) (string, error) {
 		return "", fmt.Errorf("invalid date/datetime")
 	}
 }
+
+func formatTimestamp(pattern string) func(string) (string, error) {
+	return func(v string) (string, error) {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return "", err
+		}
+		w := time.Unix(int64(f), 0)
+		return timefmt.Format(w, pattern), nil
+	}
+}

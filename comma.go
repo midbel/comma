@@ -63,6 +63,8 @@ func WithFormatters(specifiers []string) Option {
 				f = formatDate(pattern, []string{"%Y-%m-%d", "%Y/%m/%d", "%Y-%j", "%Y/%j"})
 			case "datetime":
 				f = formatDate(pattern, []string{"%Y-%m-%d %H:%M:%S"})
+			case "timestamp":
+				f = formatTimestamp(pattern)
 			case "duration":
 				f = formatDuration(pattern)
 			case "int":
