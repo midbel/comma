@@ -174,11 +174,52 @@ func runCross(cmd *cli.Command, args []string) error {
 	return ErrImplemented
 }
 
-func runEval(cmd *cli.Command, args []string) error {
+func runDescribe(cmd *cli.Command, args []string) error {
 	return ErrImplemented
 }
 
-func runDescribe(cmd *cli.Command, args []string) error {
+func runEval(cmd *cli.Command, args []string) error {
+	o := Options{
+		Separator: Comma(','),
+		Width:     DefaultWidth,
+	}
+	cmd.Flag.Var(&o.Separator, "separator", "separator")
+	cmd.Flag.IntVar(&o.Limit, "limit", 0, "show N first rows")
+	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
+	cmd.Flag.StringVar(&o.File, "file", "", "input file")
+	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
+	if err := cmd.Flag.Parse(args); err != nil {
+		return err
+	}
+	e, err := comma.ParseEval(cmd.Flag.Arg(0))
+	if err != nil {
+		return err
+	}
+
+	r, err := o.Open("", nil)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	dump := Dump(os.Stdout, o.Width, o.Table)
+	for {
+		switch row, err := r.Next(); err {
+		case nil:
+			row, err := e.Eval(row)
+			if err != nil {
+				return err
+			}
+			if o.Tag != "" {
+				row = append([]string{o.Tag}, row...)
+			}
+			dump.Dump(row)
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
 	return ErrImplemented
 }
 
