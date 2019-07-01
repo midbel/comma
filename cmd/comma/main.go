@@ -74,7 +74,7 @@ var commands = []*cli.Command{
 		Run:   runEval,
 	},
 	{
-		Usage: "show [-file] [-tag] [-width] [-limit]",
+		Usage: "show [-file] [-tag] [-width] [-limit] [<headers...>]",
 		Alias: []string{"table"},
 		Short: "",
 		Run:   runTable,
@@ -404,11 +404,21 @@ func runTable(cmd *cli.Command, args []string) error {
 	defer r.Close()
 
 	dump := Dump(os.Stdout, o.Width, true)
+	headers := cmd.Flag.Args()
+	if len(headers) > 0 {
+		if o.Tag != "" {
+			headers = append([]string{"tag"}, headers...)
+		}
+		dump.Dump(headers)
+	}
 	for i := 0; o.Limit <= 0 || i < o.Limit; i++ {
 		switch row, err := r.Next(); err {
 		case nil:
 			if o.Tag != "" {
 				row = append([]string{o.Tag}, row...)
+			}
+			if len(row) > len(headers) {
+				row = row[:len(headers)]
 			}
 			dump.Dump(row)
 		case io.EOF:
