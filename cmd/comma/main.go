@@ -18,7 +18,7 @@ import (
 var commands = []*cli.Command{
 	{
 		Usage: "select [-separator] [-tag] [-table] [-file] <selection>",
-		Short: "",
+		Short: "select take a subset of columns from the given selection",
 		Run:   runSelect,
 	},
 	{
@@ -28,13 +28,13 @@ var commands = []*cli.Command{
 	},
 	{
 		Usage: "filter [-table] [-tag] [-file] <expression>",
-		Short: "",
+		Short: "filter discard rows from file that does not pass the given criteria",
 		Run:   runFilter,
 	},
 	{
 		Usage: "format [-table] [-tag] [-file] <selection...>",
 		Alias: []string{"fmt"},
-		Short: "",
+		Short: "format reformat value of column according to the given selection",
 		Run:   runFormat,
 	},
 	{
@@ -50,12 +50,12 @@ var commands = []*cli.Command{
 	},
 	{
 		Usage: "transpose [-table] [-file]",
-		Short: "",
+		Short: "transpose switch the columns and the rows",
 		Run:   runTranspose,
 	},
 	{
 		Usage: "cat [-append] [-table] [-width] [-separator] <file...>",
-		Short: "",
+		Short: "cat concatenate two or more files by columns or by rows",
 		Run:   runCat,
 	},
 	{
@@ -65,18 +65,18 @@ var commands = []*cli.Command{
 	},
 	{
 		Usage: "split [-datadir] [-prefix] [-file] <selection> <expression>",
-		Short: "",
+		Short: "split creates multiple files from the given file according to a criteria",
 		Run:   runSplit,
 	},
 	{
 		Usage: "eval [-table] [-width] [-file] <expression...>",
-		Short: "",
+		Short: "eval execute scriplets on columns one row at a time",
 		Run:   runEval,
 	},
 	{
 		Usage: "show [-file] [-tag] [-width] [-limit] [<headers...>]",
 		Alias: []string{"table"},
-		Short: "",
+		Short: "show prints the content of the files on stdout",
 		Run:   runTable,
 	},
 }
