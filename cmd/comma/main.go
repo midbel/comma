@@ -417,7 +417,7 @@ func runTable(cmd *cli.Command, args []string) error {
 			if o.Tag != "" {
 				row = append([]string{o.Tag}, row...)
 			}
-			if len(row) > len(headers) {
+			if z := len(headers); z > 0 && len(row) > z {
 				row = row[:len(headers)]
 			}
 			dump.Dump(row)
