@@ -6,6 +6,39 @@ import (
 	"github.com/midbel/comma/eval"
 )
 
+type Filter struct {
+	expr eval.Expression
+}
+
+func ParseFilter(str string) (*Filter, error) {
+	p, err := eval.Parse(str)
+	if err != nil {
+		return nil, err
+	}
+	e, err := p.ParseExpression()
+	if err != nil {
+		return nil, err
+	}
+	return &Filter{expr: e}, nil
+}
+
+func (f Filter) Match(row []string) bool {
+	v, err := f.expr.Value(row)
+	if err != nil {
+		return false
+	}
+	switch v := v.(type) {
+	case eval.Bool:
+		return bool(v)
+	case eval.Literal:
+		return float64(v) != 0
+	case eval.Text:
+		return len(v) != 0
+	default:
+		return false
+	}
+}
+
 type evaluator struct {
 	es []eval.Evaluator
 }

@@ -337,9 +337,9 @@ func runSplit(cmd *cli.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("selection (key): %s", err)
 	}
-	var match comma.Matcher
-	if m, err := comma.ParseFilter(cmd.Flag.Arg(1)); err == nil {
-		match = m
+	var filter *comma.Filter
+	if f, err := comma.ParseFilter(cmd.Flag.Arg(1)); err == nil {
+		filter = f
 	} else {
 		return fmt.Errorf("filter: %s", err)
 	}
@@ -352,7 +352,7 @@ func runSplit(cmd *cli.Command, args []string) error {
 
 	dumps := make(map[string]*Dumper)
 	for {
-		switch row, err := r.Filter(match); err {
+		switch row, err := r.Filter(filter); err {
 		case nil:
 			ds, id := selectKeys(sel, row)
 			if _, ok := dumps[id]; !ok {
