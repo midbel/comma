@@ -188,6 +188,7 @@ func runEval(cmd *cli.Command, args []string) error {
 	cmd.Flag.IntVar(&o.Width, "width", o.Width, "column width")
 	cmd.Flag.StringVar(&o.File, "file", "", "input file")
 	cmd.Flag.StringVar(&o.Tag, "tag", "", "tag")
+	cmd.Flag.BoolVar(&o.Table, "table", false, "print data in table format")
 	if err := cmd.Flag.Parse(args); err != nil {
 		return err
 	}

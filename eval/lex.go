@@ -47,6 +47,7 @@ const (
 	lcurly    = '{'
 	rcurly    = '}'
 	caret     = '^'
+	comma     = ','
 )
 
 type Token struct {
@@ -320,7 +321,7 @@ func isVariable(x byte, all bool) bool {
 }
 
 func isMath(x byte) bool {
-	return x == plus || x == minus || x == multiply || x == divide || x == modulo || x == caret
+	return x == plus || x == minus || x == multiply || x == divide || x == modulo || x == caret || x == comma
 }
 
 func isIndex(x byte) bool {

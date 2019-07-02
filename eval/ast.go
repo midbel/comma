@@ -6,6 +6,41 @@ import (
 	"strings"
 )
 
+type Function struct {
+	name   string
+	params []Expression
+}
+
+func (f Function) String() string {
+	var b strings.Builder
+	b.WriteString(f.name)
+	b.WriteRune(lparen)
+	for i, p := range f.params {
+		b.WriteString(p.String())
+		if i < len(f.params)-1 {
+			b.WriteRune(comma)
+		}
+	}
+	b.WriteRune(rparen)
+	return b.String()
+}
+
+func (f Function) Value(row []string) (Value, error) {
+	fn, ok := funcs[f.name]
+	if !ok {
+		return nil, fmt.Errorf("function %s not found", f.name)
+	}
+	vs := make([]Value, 0, len(f.params))
+	for _, p := range f.params {
+		v, err := p.Value(row)
+		if err != nil {
+			return nil, err
+		}
+		vs = append(vs, v)
+	}
+	return fn(vs...)
+}
+
 type Infix struct {
 	operator rune
 	left     Expression

@@ -26,6 +26,7 @@ const (
 	bindPower     // ^
 	bindPrefix    // !, -
 	bindGroup     // ()
+	bindCall      // ()
 )
 
 var bindings = map[rune]int{
@@ -38,7 +39,8 @@ var bindings = map[rune]int{
 	divide:   bindProduct,
 	modulo:   bindProduct,
 	caret:    bindPower,
-	lparen:   bindGroup,
+	// lparen:   bindGroup,
+	lparen:   bindCall,
 	or:       bindLogical,
 	and:      bindLogical,
 	equal:    bindRelation,
@@ -80,6 +82,7 @@ func Parse(str string) (*Parser, error) {
 		greateq:  p.parseInfix,
 		caret:    p.parseInfix,
 		assign:   p.parseAssignInfix,
+		lparen:   p.parseCall,
 		question: p.parseCondition,
 	}
 	p.prefix = map[rune]func() (Expression, error){
@@ -147,6 +150,38 @@ func (p *Parser) parseExpression(bp int) (Expression, error) {
 	return left, nil
 }
 
+func (p *Parser) parseCall(left Expression) (Expression, error) {
+	if p.peek.Type == rparen {
+		return left, nil
+	}
+	p.nextToken()
+
+	fn, ok := left.(Function)
+	if !ok {
+		return nil, fmt.Errorf("parser error: expected <function>, got %T", left)
+	}
+	e, err := p.parseExpression(bindLowest)
+	if err != nil {
+		return nil, err
+	}
+	fn.params = append(fn.params, e)
+	for p.peek.Type == comma {
+		p.nextToken()
+		p.nextToken()
+		e, err = p.parseExpression(bindLowest)
+		if err != nil {
+			return nil, err
+		}
+		fn.params = append(fn.params, e)
+	}
+	if p.peek.Type != rparen {
+		return nil, fmt.Errorf("parser error: expected ), got %s", p.peek)
+	} else {
+		p.nextToken()
+	}
+	return fn, nil
+}
+
 func (p *Parser) parseCondition(left Expression) (Expression, error) {
 	// fmt.Println("-> parseCondition:", p.curr.String())
 	p.nextToken()
@@ -204,10 +239,14 @@ func (p *Parser) parseValue() (Expression, error) {
 	default:
 		err = fmt.Errorf("parser error: can not parse %s", p.curr)
 	case variable:
-		if b, e := strconv.ParseBool(p.curr.Literal); e != nil {
-			err = e
+		if lit := p.curr.Literal; lit == "true" || lit == "false" {
+			if b, e := strconv.ParseBool(p.curr.Literal); e != nil {
+				err = e
+			} else {
+				exp = Bool(b)
+			}
 		} else {
-			exp = Bool(b)
+			exp = Function{name: lit}
 		}
 	case text:
 		exp = Text(p.curr.Literal)
