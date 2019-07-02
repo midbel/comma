@@ -18,6 +18,7 @@ var funcs = map[string]func(...Value) (Value, error){
 	"tolower":  toLower,
 	"toupper":  toUpper,
 	"title":    title,
+	"substr":   substring,
 	"rshift":   rshift,
 	"lshift":   lshift,
 	"sqrt":     sqrt,
@@ -36,6 +37,43 @@ func size(vs ...Value) (Value, error) {
 		return nil, ErrArgType
 	}
 	return Literal(len(t)), nil
+}
+
+func substring(vs ...Value) (Value, error) {
+	if len(vs) < 2 {
+		return nil, ErrArgNum
+	}
+	t, ok := vs[0].(Text)
+	if !ok {
+		return nil, ErrArgType
+	}
+	str := string(t)
+	var from, to int
+
+	ix := 1
+	if len(vs) == 3 {
+		if i, ok := vs[ix].(Literal); !ok {
+			return nil, ErrArgType
+		} else {
+			from = int(i)
+			if from < 0 || from >= len(str) {
+				return nil, fmt.Errorf("index out of range %d", from)
+			}
+		}
+		ix++
+	}
+	if i, ok := vs[ix].(Literal); !ok {
+		return nil, ErrArgType
+	} else {
+		to = int(i)
+		if to < 0 || to >= len(str) {
+			return nil, fmt.Errorf("index out of range %d", to)
+		}
+	}
+	if from >= to {
+		return nil, fmt.Errorf("invalid range: %d-%d", from, to)
+	}
+	return Text(str[from:to]), nil
 }
 
 func contains(vs ...Value) (Value, error) {
