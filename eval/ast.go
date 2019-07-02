@@ -68,6 +68,8 @@ func (x Infix) Value(row []string) (Value, error) {
 		v, err = evalDivide(left, right)
 	case modulo:
 		v, err = evalModulo(left, right)
+	case caret:
+		v, err = evalPower(left, right)
 	case or:
 		v, err = evalOr(left, right)
 	case and:
@@ -375,6 +377,16 @@ func evalDivide(left, right Value) (Value, error) {
 		return Literal(x / y), nil
 	} else {
 		return nil, mismatch(divide, left.Type(), right.Type())
+	}
+}
+
+func evalPower(left, right Value) (Value, error) {
+	if left.Type() == Number && right.Type() == Number {
+		x, y := left.(Literal), right.(Literal)
+		v := math.Pow(float64(x), float64(y))
+		return Literal(v), nil
+	} else {
+		return nil, mismatch(caret, left.Type(), right.Type())
 	}
 }
 

@@ -23,6 +23,7 @@ const (
 	bindRelation  // ==, !=, <, >, <=, >=
 	bindSum       // +, -
 	bindProduct   // *, /
+	bindPower     // ^
 	bindPrefix    // !, -
 	bindGroup     // ()
 )
@@ -36,6 +37,7 @@ var bindings = map[rune]int{
 	multiply: bindProduct,
 	divide:   bindProduct,
 	modulo:   bindProduct,
+	caret:    bindPower,
 	lparen:   bindGroup,
 	or:       bindLogical,
 	and:      bindLogical,
@@ -76,6 +78,7 @@ func Parse(str string) (*Parser, error) {
 		lesseq:   p.parseInfix,
 		greater:  p.parseInfix,
 		greateq:  p.parseInfix,
+		caret:    p.parseInfix,
 		assign:   p.parseAssignInfix,
 		question: p.parseCondition,
 	}
