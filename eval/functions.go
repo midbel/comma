@@ -22,6 +22,9 @@ var funcs = map[string]func(...Value) (Value, error){
 	"lshift":   lshift,
 	"sqrt":     sqrt,
 	"abs":      abs,
+	"min":      min,
+	"max":      max,
+	"avg":      average,
 }
 
 func size(vs ...Value) (Value, error) {
@@ -152,4 +155,47 @@ func sqrt(vs ...Value) (Value, error) {
 	}
 	q := math.Sqrt(float64(i))
 	return Literal(q), nil
+}
+
+func min(vs ...Value) (Value, error) {
+	var m Literal
+	for i, v := range vs {
+		v, ok := v.(Literal)
+		if !ok {
+			return m, ErrArgType
+		}
+		if i == 0 || v < m {
+			m = v
+		}
+	}
+	return m, nil
+}
+
+func max(vs ...Value) (Value, error) {
+	var m Literal
+	for i, v := range vs {
+		v, ok := v.(Literal)
+		if !ok {
+			return m, ErrArgType
+		}
+		if i == 0 || v > m {
+			m = v
+		}
+	}
+	return m, nil
+}
+
+func average(vs ...Value) (Value, error) {
+	if len(vs) == 0 {
+		return Literal(0), nil
+	}
+	var m Literal
+	for _, v := range vs {
+		v, ok := v.(Literal)
+		if !ok {
+			return m, ErrArgType
+		}
+		m += v
+	}
+	return m / Literal(len(vs)), nil
 }
