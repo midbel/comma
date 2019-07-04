@@ -99,6 +99,77 @@ type Value interface {
 	fmt.Stringer
 }
 
+type Cast struct {
+	Cast  string
+	Inner Expression
+}
+
+func castTo(e Expression, typ string) Expression {
+	return Cast{Cast: typ, Inner: e}
+}
+
+func (c Cast) Type() Type {
+	switch c.Cast {
+	case "number":
+		return Number
+	case "text":
+		return String
+	case "boolean":
+		return Boolean
+	default:
+		return unknown
+	}
+}
+
+func (c Cast) Value(row []string) (Value, error) {
+	v, err := c.Inner.Value(row)
+	if err == nil {
+		switch c.Type() {
+		default:
+			return nil, failtocast(c.Cast, c.String())
+		case Number:
+			switch x := v.(type) {
+			case Bool:
+				if x {
+					v = Literal(1)
+				} else {
+					v = Literal(0)
+				}
+			case Literal:
+				v = x
+			case Text:
+				if x, err := strconv.ParseFloat(string(x), 64); err != nil {
+					return nil, err
+				} else {
+					v = Literal(x)
+				}
+			}
+		case Boolean:
+			switch x := v.(type) {
+			case Bool:
+				v = v
+			case Text:
+				v = Bool(len(x) == 0)
+			case Literal:
+				v = Bool(x == 0)
+			}
+		case String:
+			v = Text(v.String())
+		}
+	}
+	return v, err
+}
+
+func (c Cast) String() string {
+	var b strings.Builder
+	b.WriteString(c.Inner.String())
+	b.WriteRune(colon)
+	b.WriteRune(colon)
+	b.WriteString(c.Cast)
+
+	return b.String()
+}
+
 type Literal float64
 
 func (i Literal) Type() Type                      { return Number }

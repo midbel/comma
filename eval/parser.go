@@ -259,6 +259,15 @@ func (p *Parser) parseValue() (Expression, error) {
 	case env:
 		exp = Internal(p.curr.Literal)
 	}
+	if p.peek.Type == cast {
+		p.nextToken()
+		switch exp.(type) {
+		case Bool, Text, Literal:
+			exp = castTo(exp, p.curr.Literal)
+		default:
+			return nil, fmt.Errorf("parser error: %T can not be casted!", exp)
+		}
+	}
 	return exp, err
 }
 

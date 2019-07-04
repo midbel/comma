@@ -5,6 +5,58 @@ import (
 	"testing"
 )
 
+func TestParseValue(t *testing.T) {
+	data := []struct {
+		Input string
+		Type  Type
+		Want  interface{}
+	}{
+		{Input: "\"helloworld\"", Want: "helloworld", Type: String},
+		{Input: "\"helloworld\"::text", Want: "helloworld", Type: String},
+		{Input: "2", Want: 2., Type: Number},
+		{Input: "\"2\"::number", Want: 2., Type: Number},
+		{Input: "2::text", Want: "2", Type: String},
+	}
+	for i, d := range data {
+		e, err := parseExpression(d.Input)
+		if err != nil {
+			t.Errorf("%d) fail to parse %s: %s", i+1, d.Input, err)
+			continue
+		}
+		v, err := e.Value(nil)
+		if err != nil {
+			t.Errorf("%d) fail to get value: %s", i+1, err)
+			continue
+		}
+		if typ := v.Type(); typ != d.Type {
+			t.Errorf("%d) wrong type: want %s, got %s", i+1, d.Type, typ)
+			continue
+		}
+		switch v := v.(type) {
+		case Text:
+			want, ok := d.Want.(string)
+			if !ok {
+				t.Errorf("%d) type mismatch: want 'string', got %T", i+1, d.Want)
+				continue
+			}
+			got := string(v)
+			if got != want {
+				t.Errorf("%d) wrong value: want %s, got %s", i+1, want, got)
+			}
+		case Literal:
+			want, ok := d.Want.(float64)
+			if !ok {
+				t.Errorf("%d) type mismatch: want 'float64', got %T", i+1, d.Want)
+				continue
+			}
+			got := float64(want)
+			if got != want {
+				t.Errorf("%d) wrong value: want %f, got %f", i+1, want, got)
+			}
+		}
+	}
+}
+
 func TestParseInfix(t *testing.T) {
 	data := []struct {
 		Input  string
