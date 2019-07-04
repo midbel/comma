@@ -179,7 +179,12 @@ func (p *Parser) parseCall(left Expression) (Expression, error) {
 	} else {
 		p.nextToken()
 	}
-	return fn, nil
+	if p.peek.Type == cast {
+		p.nextToken()
+		return castTo(fn, p.curr.Literal), nil
+	} else {
+		return fn, nil
+	}
 }
 
 func (p *Parser) parseCondition(left Expression) (Expression, error) {

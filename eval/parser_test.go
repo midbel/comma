@@ -16,6 +16,9 @@ func TestParseValue(t *testing.T) {
 		{Input: "2", Want: 2., Type: Number},
 		{Input: "\"2\"::number", Want: 2., Type: Number},
 		{Input: "2::text", Want: "2", Type: String},
+		{Input: "substr(\"helloworld\", 5)::text", Want: "hello", Type: String},
+		{Input: "substr(\"1000\", 2)::text", Want: "10", Type: String},
+		{Input: "substr(\"1000\", 2)::number", Want: 10., Type: Number},
 	}
 	for i, d := range data {
 		e, err := parseExpression(d.Input)
